@@ -49,3 +49,13 @@ def test_f3_pr_yml_contract():
             if isinstance(run, str) and "scripts/scrub_check.py" in run:
                 scrub_step_found = True
     assert scrub_step_found
+
+def test_f3_gitleaks_scans_before_dependency_sync():
+    """The 2026-08-26 first CI run failed because uv sync ran before gitleaks,
+    so the scan swept .venv where linux dependency wheels carry sample key
+    material. The tree scans must run on the pristine checkout."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    data = yaml.safe_load(text)
+    names = [s["name"] for s in data["jobs"]["test"]["steps"]]
+    assert names.index("Gitleaks working tree") < names.index("Sync locked dependencies")
+    assert names.index("Gitleaks git history") < names.index("Sync locked dependencies")
