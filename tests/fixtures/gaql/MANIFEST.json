@@ -1,0 +1,49 @@
+{
+  "files": [
+    "conv_asset.json",
+    "conv_asset_group.json",
+    "conv_campaign.json",
+    "entities_asset.json",
+    "entities_asset_group.json",
+    "entities_asset_group_asset.json",
+    "entities_asset_group_signal.json",
+    "entities_campaign.json",
+    "entities_campaign_asset.json",
+    "entities_conversion_action.json",
+    "entities_customer.json",
+    "lag_asset_group.json",
+    "lag_campaign.json",
+    "volume_asset.json",
+    "volume_asset_group.json",
+    "volume_campaign.json"
+  ],
+  "id_count": 8,
+  "id_kinds": {
+    "account_id": 1,
+    "asset_group_id": 2,
+    "asset_group_signal_id": 1,
+    "asset_id": 1,
+    "budget_id": 1,
+    "campaign_id": 1,
+    "conversion_action_id": 1
+  },
+  "row_counts": {
+    "conv_asset.json": 1,
+    "conv_asset_group.json": 2,
+    "conv_campaign.json": 1,
+    "entities_asset.json": 1,
+    "entities_asset_group.json": 1,
+    "entities_asset_group_asset.json": 1,
+    "entities_asset_group_signal.json": 1,
+    "entities_campaign.json": 1,
+    "entities_campaign_asset.json": 1,
+    "entities_conversion_action.json": 1,
+    "entities_customer.json": 1,
+    "lag_asset_group.json": 4,
+    "lag_campaign.json": 2,
+    "volume_asset.json": 1,
+    "volume_asset_group.json": 1,
+    "volume_campaign.json": 1
+  },
+  "seed": 7
+}

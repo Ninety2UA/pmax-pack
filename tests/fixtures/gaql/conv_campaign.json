@@ -1,0 +1,15 @@
+[
+  {
+    "account_id": 339309795942466,
+    "ad_network_type": "SEARCH",
+    "all_conversions": 4.335259805295179,
+    "all_conversions_value": 50.344296643184954,
+    "campaign_id": 144516577924754,
+    "campaign_name": "Campaign 973136972183593",
+    "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
+    "conversion_action_name": "Action 475576146142245",
+    "conversions": 3.468207844236143,
+    "conversions_value": 40.275437314547965,
+    "date": "2026-08-20"
+  }
+]

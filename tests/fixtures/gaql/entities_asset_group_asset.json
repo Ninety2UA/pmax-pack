@@ -1,0 +1,13 @@
+[
+  {
+    "account_id": 339309795942466,
+    "asset_group_id": 912271053388344,
+    "asset_id": 572097562246904,
+    "campaign_id": 144516577924754,
+    "field_type": "HEADLINE",
+    "primary_status": "ELIGIBLE",
+    "primary_status_reasons": [],
+    "source": "ADVERTISER",
+    "status": "ENABLED"
+  }
+]

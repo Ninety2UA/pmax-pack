@@ -1,0 +1,31 @@
+version: 1
+steps:
+  - name: hard_check
+    kind: assertion
+    sql: assertions/hard_check.sql
+    depends_on: [summary]
+    severity: HARD
+  - name: summary
+    kind: view
+    sql: views/summary.sql
+    depends_on: [transform]
+  - name: base
+    kind: ddl
+    sql: ddl/base.sql
+    depends_on: []
+    partition_field: event_date
+    clustering_fields: [account_id]
+  - name: soft_check
+    kind: assertion
+    sql: assertions/soft_check.sql
+    depends_on: [summary]
+    severity: SOFT
+  - name: transform
+    kind: table
+    sql: tables/transform.sql
+    depends_on: [base]
+    partition_field: event_date
+    clustering_fields: [account_id]
+    timeout_seconds: 17
+    maximum_bytes_billed: 1234
+    write_mode: replace_partition

@@ -1,0 +1,13 @@
+pMax Performance Pack
+Copyright 2026 Ninety2
+
+This product includes reference material from the following Apache-2.0
+projects. They are references only, not runtime dependencies.
+
+  Google pMaximizer (pmax_best_practices_dashboard)
+  pinned at commit 9790e8a
+  Licensed under the Apache License, Version 2.0
+
+  Google App Reporting Pack
+  pinned at commit 53bac63
+  Licensed under the Apache License, Version 2.0

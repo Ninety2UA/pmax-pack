@@ -1,0 +1,39 @@
+[project]
+name = "pmax-pack"
+version = "0.1.0"
+description = "Google Ads Performance Max data engine: gaarf extraction to BigQuery marts"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+authors = [{ name = "Ninety2" }]
+dependencies = [
+    "google-ads==31.4.0",
+    "google-ads-api-report-fetcher==1.18.3",
+    "google-cloud-bigquery==3.44.0",
+    "google-cloud-storage",
+    "pyyaml",
+    "jinja2",
+    "tenacity",
+]
+
+[project.scripts]
+pmax-pack = "pmax_pack.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "duckdb",
+    "pytest",
+    "sqlglot",
+    "pyyaml",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pmax_pack"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,25 @@
+[
+  {
+    "account_id": 339309795942466,
+    "ad_strength": "EXCELLENT",
+    "ad_strength_action_items": [
+      {
+        "action_item_type": "ADD_ASSET",
+        "add_asset_details": {
+          "asset_count": 1,
+          "asset_field_type": "HEADLINE",
+          "video_aspect_ratio_requirement": null
+        }
+      }
+    ],
+    "asset_group_id": 912271053388344,
+    "asset_group_name": "AssetGroup 648702559042653",
+    "campaign_id": 144516577924754,
+    "final_urls": [
+      "https://fixtures.12393c02d13c5.example/landing"
+    ],
+    "primary_status": "ELIGIBLE",
+    "primary_status_reasons": [],
+    "status": "ENABLED"
+  }
+]

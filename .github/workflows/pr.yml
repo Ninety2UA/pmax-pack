@@ -1,0 +1,68 @@
+name: PR
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          python-version: "3.12"
+          version: "0.10.4"
+
+      - name: Sync locked dependencies
+        run: uv sync --locked
+
+      - name: Unit tests
+        run: uv run pytest -q
+
+      - name: Validate GAQL fields offline
+        run: uv run python scripts/validate_gaql.py --api-version v25
+
+      - name: Render SQL templates and parse with sqlglot
+        run: |
+          if [ ! -d src/pmax_pack/sql ]; then
+            echo "src/pmax_pack/sql absent; render is a no-op"
+            exit 0
+          fi
+          uv run python - <<'PY'
+          import pathlib
+          import sqlglot
+
+          root = pathlib.Path("src/pmax_pack/sql")
+          for path in sorted(root.rglob("*.sql")):
+              text = path.read_text(encoding="utf-8")
+              sqlglot.parse(text, dialect="bigquery")
+              print(f"parsed {path}")
+          PY
+
+      - name: Download gitleaks
+        env:
+          GITLEAKS_VERSION: "8.21.2"
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tgz
+          echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+
+      - name: Gitleaks working tree
+        run: /tmp/gitleaks detect --source . --no-git --exit-code 1
+
+      - name: Gitleaks git history
+        run: /tmp/gitleaks detect --source . --exit-code 1
+
+      - name: Shape-only secret scrub
+        run: uv run python scripts/scrub_check.py .

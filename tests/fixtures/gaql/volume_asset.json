@@ -1,0 +1,18 @@
+[
+  {
+    "account_id": 339309795942466,
+    "ad_network_type": "SEARCH",
+    "all_conversions": 1.9640442541798675,
+    "all_conversions_value": 22.228152614848334,
+    "asset_group_id": 912271053388344,
+    "asset_id": 572097562246904,
+    "campaign_id": 144516577924754,
+    "clicks": 4,
+    "conversions": 1.849807880949315,
+    "conversions_value": 20.57703674972529,
+    "cost_micros": 18100,
+    "date": "2026-08-20",
+    "field_type": "HEADLINE",
+    "impressions": 31
+  }
+]

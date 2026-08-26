@@ -1,0 +1,5 @@
+# CODEOWNERS for the published pack. Required review on these paths.
+.github/ @Ninety2UA
+scripts/ @Ninety2UA
+pyproject.toml @Ninety2UA
+uv.lock @Ninety2UA

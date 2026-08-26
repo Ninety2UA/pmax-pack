@@ -1,0 +1,27 @@
+[
+  {
+    "account_id": 339309795942466,
+    "advertising_channel_type": "PERFORMANCE_MAX",
+    "asset_automation_settings": [
+      {
+        "asset_automation_status": "OPTED_IN",
+        "asset_automation_type": "TEXT_ASSET_AUTOMATION"
+      }
+    ],
+    "budget_amount_micros": 10000000,
+    "budget_explicitly_shared": false,
+    "budget_id": 153844186605220,
+    "budget_period": "DAILY",
+    "campaign_id": 144516577924754,
+    "campaign_name": "Campaign 973136972183593",
+    "end_date_time": null,
+    "negative_geo_target_type": "PRESENCE",
+    "positive_geo_target_type": "PRESENCE_OR_INTEREST",
+    "primary_status": "NOT_ELIGIBLE",
+    "primary_status_reasons": [
+      "CAMPAIGN_PAUSED"
+    ],
+    "start_date_time": "2025-01-01 00:00:00",
+    "status": "PAUSED"
+  }
+]

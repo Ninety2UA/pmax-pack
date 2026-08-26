@@ -1,0 +1,13 @@
+[
+ {
+  "account_id": 339309795942466,
+  "asset_id": 572097562246904,
+  "asset_resource_name": "customers/339309795942466/assets/572097562246904",
+  "campaign_id": 144516577924754,
+  "field_type": "SITELINK",
+  "primary_status": "ELIGIBLE",
+  "primary_status_reasons": [],
+  "status": "ENABLED",
+  "advertising_channel_type": "PERFORMANCE_MAX"
+ }
+]

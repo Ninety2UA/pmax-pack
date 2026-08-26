@@ -1,0 +1,6 @@
+version: 1
+steps:
+  - name: planted_gaql
+    kind: table
+    sql: planted_gaql.sql
+    depends_on: []

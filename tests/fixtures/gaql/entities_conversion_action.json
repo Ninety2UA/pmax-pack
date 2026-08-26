@@ -1,0 +1,14 @@
+[
+  {
+    "account_id": 339309795942466,
+    "category": "PURCHASE",
+    "click_through_lookback_window_days": 30,
+    "conversion_action_id": 314378426455897,
+    "conversion_action_name": "Action 475576146142245",
+    "conversion_action_type": "WEBPAGE",
+    "counting_type": "ONE_PER_CLICK",
+    "include_in_conversions_metric": true,
+    "status": "ENABLED",
+    "view_through_lookback_window_days": 1
+  }
+]

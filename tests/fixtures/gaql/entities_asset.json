@@ -1,0 +1,17 @@
+[
+  {
+    "account_id": 339309795942466,
+    "asset_group_id": 912271053388344,
+    "asset_id": 572097562246904,
+    "asset_name": "Asset 220585141657666",
+    "asset_type": "TEXT",
+    "campaign_id": 144516577924754,
+    "image_height_pixels": 1200,
+    "image_url": "https://fixtures.21c8c5a2364c1.example/21c8c5a2364c1.png",
+    "image_width_pixels": 1200,
+    "orientation": null,
+    "text": "Headline 702866069906489",
+    "video_id": "ZMtBBPmrFIf",
+    "video_title": "Video 880262566899613"
+  }
+]

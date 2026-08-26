@@ -1,0 +1,54 @@
+[
+  {
+    "account_id": 339309795942466,
+    "ad_network_type": "SEARCH",
+    "asset_group_id": 912271053388344,
+    "asset_group_name": "AssetGroup 648702559042653",
+    "campaign_id": 144516577924754,
+    "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
+    "conversion_action_name": "Action 475576146142245",
+    "conversion_lag_bucket": "LESS_THAN_ONE_DAY",
+    "conversions": 1.3246676784949618,
+    "conversions_value": 19.299978933273614,
+    "date": "2026-08-20"
+  },
+  {
+    "account_id": 339309795942466,
+    "ad_network_type": "SEARCH",
+    "asset_group_id": 912271053388344,
+    "asset_group_name": "AssetGroup 648702559042653",
+    "campaign_id": 144516577924754,
+    "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
+    "conversion_action_name": "Action 475576146142245",
+    "conversion_lag_bucket": "ONE_TO_TWO_DAYS",
+    "conversions": 0.42880609974661277,
+    "conversions_value": 4.694845139895615,
+    "date": "2026-08-20"
+  },
+  {
+    "account_id": 339309795942466,
+    "ad_network_type": "SEARCH",
+    "asset_group_id": 575207596426966,
+    "asset_group_name": "AssetGroup 967930114345065",
+    "campaign_id": 144516577924754,
+    "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
+    "conversion_action_name": "Action 475576146142245",
+    "conversion_lag_bucket": "LESS_THAN_ONE_DAY",
+    "conversions": 1.142555366052759,
+    "conversions_value": 11.19678693400611,
+    "date": "2026-08-20"
+  },
+  {
+    "account_id": 339309795942466,
+    "ad_network_type": "SEARCH",
+    "asset_group_id": 575207596426966,
+    "asset_group_name": "AssetGroup 967930114345065",
+    "campaign_id": 144516577924754,
+    "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
+    "conversion_action_name": "Action 475576146142245",
+    "conversion_lag_bucket": "ONE_TO_TWO_DAYS",
+    "conversions": 0.3576651552941903,
+    "conversions_value": 4.388746772574068,
+    "date": "2026-08-20"
+  }
+]

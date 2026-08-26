@@ -1,0 +1,30 @@
+[
+  {
+    "account_id": 339309795942466,
+    "ad_network_type": "SEARCH",
+    "all_conversions": 2.1918422228019683,
+    "all_conversions_value": 24.04618779766405,
+    "asset_group_id": 912271053388344,
+    "asset_group_name": "AssetGroup 648702559042653",
+    "campaign_id": 144516577924754,
+    "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
+    "conversion_action_name": "Action 475576146142245",
+    "conversions": 1.7534737782415746,
+    "conversions_value": 19.23695023813124,
+    "date": "2026-08-20"
+  },
+  {
+    "account_id": 339309795942466,
+    "ad_network_type": "SEARCH",
+    "all_conversions": 1.8752756516836866,
+    "all_conversions_value": 21.493795633464142,
+    "asset_group_id": 575207596426966,
+    "asset_group_name": "AssetGroup 967930114345065",
+    "campaign_id": 144516577924754,
+    "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
+    "conversion_action_name": "Action 475576146142245",
+    "conversions": 1.5002205213469493,
+    "conversions_value": 17.195036506771313,
+    "date": "2026-08-20"
+  }
+]

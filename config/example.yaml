@@ -1,0 +1,46 @@
+# Example operator config. Placeholder values only; never real accounts,
+# projects, or credentials.
+
+accounts:
+  - "1234567890"
+
+bulk_expansion: false
+# mcc: "1234567890"
+
+# ISO date. When omitted the pack defaults to run date minus 90 days.
+# start_date: "2026-05-28"
+
+restatement_margin_days: 7
+
+# Restricted to {1..14, 21, 30, 45, 60, 90}. Default shown.
+cohort_days: [1, 3, 7, 14, 30, 60, 90]
+
+# Reconciliation tolerance fractions.
+tolerances:
+  campaign_reconciliation: 0.01
+  asset_vs_campaign: 0.0
+  cross_grain: 0.0
+  parity: 0.0
+
+# timezone_override: "Europe/Berlin"
+
+deployment:
+  project: your-project-id
+  region: europe-west1
+
+datasets:
+  raw: pmax_raw
+  marts: pmax_marts
+  ops: pmax_ops
+  snapshots: pmax_snapshots
+  parity_scratch: pmax_parity_scratch
+  parity_scratch_bq: pmax_parity_scratch_bq
+  ci_scratch: pmax_ci_scratch
+  ci_scratch_bq: pmax_ci_scratch_bq
+  marts_verify: pmax_marts_verify
+
+buckets:
+  report_bucket: your-report-bucket
+  config_bucket: your-config-bucket
+
+api_version: v25

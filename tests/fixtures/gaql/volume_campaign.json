@@ -1,0 +1,16 @@
+[
+  {
+    "account_id": 339309795942466,
+    "ad_network_type": "SEARCH",
+    "all_conversions": 6.053970217294828,
+    "all_conversions_value": 56.63205835702927,
+    "campaign_id": 144516577924754,
+    "campaign_name": "Campaign 973136972183593",
+    "clicks": 10,
+    "conversions": 4.18061090453433,
+    "conversions_value": 40.607001601170396,
+    "cost_micros": 51356,
+    "date": "2026-08-20",
+    "impressions": 117
+  }
+]
