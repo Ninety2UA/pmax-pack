@@ -1,8 +1,10 @@
 # Gitleaks configuration for the public pmax-pack repository.
 # The deploy harness tests use a fixed synthetic credential fingerprint
 # (twelve hex characters, no secret behind it). Its entropy trips the
-# generic-api-key rule, so that exact literal is allowlisted in the test
-# scripts only. Every other finding stays fatal.
+# generic-api-key rule. Gitleaks ORs global allowlist criteria, so this
+# config allowlists only that exact literal, repo-wide; a paths entry
+# would exempt whole files from every rule. Every other finding stays
+# fatal, including real secrets in the harness test scripts.
 title = "pmax-pack"
 
 [extend]
@@ -10,10 +12,6 @@ useDefault = true
 
 [allowlist]
 description = "Synthetic credential fingerprint used by the deploy harness tests"
-paths = [
-  '''deploy/tests/test_deploy_first_run\.sh''',
-  '''deploy/tests/test_deploy_review\.sh''',
-]
 regexes = [
   '''abc123def456''',
 ]

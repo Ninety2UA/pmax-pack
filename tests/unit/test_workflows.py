@@ -89,10 +89,19 @@ def test_no_workflow_federates_to_gcp() -> None:
     # never requests an OIDC token or a GCP credential. Real-data parity runs
     # from the operator's deploy ladder (phase 80).
     assert not TRUSTED_WORKFLOW.exists()
-    for path in sorted(WORKFLOW.parent.glob("*.yml")):
-        if path.name.startswith("."):
+    assert not (WORKFLOW.parent / "trusted.yaml").exists()
+    paths = sorted(
+        p
+        for ext in ("*.yml", "*.yaml")
+        for p in WORKFLOW.parent.glob(ext)
+    )
+    assert paths
+    for path in paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            # A non-UTF-8 sidecar (macOS AppleDouble) is not a workflow.
             continue
-        text = path.read_text(encoding="utf-8")
         assert "google-github-actions/auth" not in text, path
         assert "id-token" not in text, path
         assert "workload_identity_provider" not in text, path

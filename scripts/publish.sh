@@ -138,9 +138,9 @@ else
   BRANCH="release/${VERSION}"
   # A second publish of the same version lands as a further commit on the
   # existing release branch (fast-forward), so an open PR simply re-runs CI.
-  if git ls-remote --exit-code --heads "$TARGET" "$BRANCH" >/dev/null 2>&1; then
-    git clone --branch "$BRANCH" "$TARGET" "$WORK"
-  else
+  if ! git clone --branch "$BRANCH" "$TARGET" "$WORK" 2>/dev/null; then
+    rm -rf "$WORK"
+    mkdir -p "$WORK"
     git clone --branch main "$TARGET" "$WORK"
     git -C "$WORK" checkout -b "$BRANCH"
   fi

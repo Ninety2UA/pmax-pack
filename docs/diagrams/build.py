@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import json
 import os
 import shutil
@@ -669,7 +670,7 @@ def _write_diagram(
     )
     try:
         png = base64.b64decode(_extract_image(png_result, "png"), validate=True)
-    except (ValueError, base64.binascii.Error) as error:
+    except (ValueError, binascii.Error) as error:
         raise CanvasError(f"{diagram.name}: PNG export is not valid base64") from error
     if not png.startswith(b"\x89PNG\r\n\x1a\n"):
         raise CanvasError(f"{diagram.name}: PNG export has the wrong signature")
@@ -683,39 +684,65 @@ def build(base_url: str, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "qa").mkdir(parents=True, exist_ok=True)
     _health(base_url)
-    with tempfile.TemporaryDirectory(prefix="pmax-canvas-snapshot-") as temp_dir:
-        snapshot_path = Path(temp_dir) / "canvas-elements.json"
-        snapshot = _request(base_url, "GET", "/api/elements")
-        snapshot_elements = snapshot.get("elements")
-        if not isinstance(snapshot_elements, list):
-            raise CanvasError("canvas snapshot contains no element list")
-        snapshot_path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+    snapshot_fd, snapshot_name = tempfile.mkstemp(
+        prefix="pmax-canvas-snapshot-", suffix=".json"
+    )
+    os.close(snapshot_fd)
+    snapshot_path = Path(snapshot_name)
+    snapshot = _request(base_url, "GET", "/api/elements")
+    snapshot_elements = snapshot.get("elements")
+    if not isinstance(snapshot_elements, list):
+        snapshot_path.unlink(missing_ok=True)
+        raise CanvasError("canvas snapshot contains no element list")
+    snapshot_path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+    build_error: BaseException | None = None
+    try:
+        for diagram in DIAGRAMS:
+            _write_diagram(base_url, output_dir, diagram)
+    except BaseException as error:
+        build_error = error
+        raise
+    finally:
+        # The snapshot file is durable: it is deleted only after a verified
+        # restore, so a failed restore always leaves a recovery artifact.
         try:
-            for diagram in DIAGRAMS:
-                _write_diagram(base_url, output_dir, diagram)
-        finally:
-            try:
-                saved = json.loads(snapshot_path.read_text(encoding="utf-8"))
-                saved_elements = saved.get("elements")
-                if not isinstance(saved_elements, list):
-                    raise CanvasError("saved canvas snapshot contains no element list")
-                _request(base_url, "DELETE", "/api/elements/clear")
-                _request(
-                    base_url,
-                    "POST",
-                    "/api/elements/sync",
-                    {"elements": saved_elements, "timestamp": int(time.time() * 1000)},
+            saved = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            saved_elements = saved.get("elements")
+            if not isinstance(saved_elements, list):
+                raise CanvasError("saved canvas snapshot contains no element list")
+            _request(base_url, "DELETE", "/api/elements/clear")
+            _request(
+                base_url,
+                "POST",
+                "/api/elements/sync",
+                {"elements": saved_elements, "timestamp": int(time.time() * 1000)},
+            )
+            restored = _request(base_url, "GET", "/api/elements").get("elements")
+            if not isinstance(restored, list):
+                raise CanvasError("canvas restore returned no element list")
+            saved_ids = sorted(str(el.get("id")) for el in saved_elements)
+            restored_ids = sorted(str(el.get("id")) for el in restored)
+            if restored_ids != saved_ids:
+                raise CanvasError(
+                    "canvas restore element mismatch: "
+                    f"expected {len(saved_ids)} elements, got {len(restored_ids)}"
                 )
-                restored = _request(base_url, "GET", "/api/elements").get("elements")
-                if not isinstance(restored, list) or len(restored) != len(saved_elements):
-                    raise CanvasError(
-                        "canvas restore count mismatch: "
-                        f"expected {len(saved_elements)}, got "
-                        f"{len(restored) if isinstance(restored, list) else 'invalid'}"
-                    )
-                print(f"restored canvas snapshot from temporary file ({snapshot_path})")
-            except BaseException as restore_error:
-                raise CanvasError(f"canvas restore failed: {restore_error}") from restore_error
+            snapshot_path.unlink(missing_ok=True)
+            print("restored canvas snapshot (verified by element ids)")
+        except BaseException as restore_error:
+            # Never mask a build failure with a restore failure: report the
+            # restore problem and the retained snapshot, then let the original
+            # exception continue if one is propagating.
+            print(
+                "build.py: canvas restore failed: "
+                f"{restore_error}; snapshot retained at {snapshot_path}",
+                file=sys.stderr,
+            )
+            if build_error is None:
+                raise CanvasError(
+                    f"canvas restore failed: {restore_error}; "
+                    f"snapshot retained at {snapshot_path}"
+                ) from restore_error
 
 
 def main() -> int:

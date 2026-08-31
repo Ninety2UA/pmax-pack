@@ -53,7 +53,8 @@ def main() -> int:
         try:
             sqlglot.parse(render(step, config, ctx), dialect="bigquery")
         except Exception as exc:  # noqa: BLE001 - report every failing step
-            failures.append(f"{step.name}: {str(exc).splitlines()[0]}")
+            message = str(exc).splitlines() or ["(no message)"]
+            failures.append(f"{step.name}: {message[0]}")
     stray = sorted(
         str(path.relative_to(ROOT))
         for path in SQL_ROOT.rglob("*.sql")

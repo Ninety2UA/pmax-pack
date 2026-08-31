@@ -494,10 +494,53 @@ assert_contains "$ROOT/deploy/iam.md" "shared MCC token"
 assert_contains "$PHASES/75-lease-drill.sh" \
   'exactly one SUCCESS and one SKIPPED across the two drill executions, regardless of which won.'
 if [[ ! -f "$ROOT/INDEX.md" ]]; then
+  if private_tree; then
+    fail "INDEX.md is missing from the private tree"
+  fi
   echo "SKIP: $ROOT/INDEX.md absent (private file not part of this export)"
 elif ! grep -Eq '^\| RUNBOOK\.md \|.*\| 2026-08-29 \|$' "$ROOT/INDEX.md"; then
   fail "INDEX.md does not date the RUNBOOK row to 2026-08-29"
 fi
+
+# Private-tree rollback pinning: the generic anchor phrases above hold in
+# every tree; where the deployment evidence exists, the documents must also
+# carry the exact recorded values (a wrong digest must fail, not pass).
+if private_tree; then
+  # Locate the anchor by glob so no deployment identifier ships in this file.
+  ANCHOR_CANDIDATES=("$ROOT"/deployments/*/rollback-anchor.txt)
+  [[ ${#ANCHOR_CANDIDATES[@]} -eq 1 && -f "${ANCHOR_CANDIDATES[0]}" ]] || \
+    fail "expected exactly one deployments/*/rollback-anchor.txt in the private tree"
+  ANCHOR_FILE="${ANCHOR_CANDIDATES[0]}"
+  assert_contains "$ANCHOR_FILE" "anchor_digest="
+  ANCHOR_DIGEST="$(sed -n 's/^anchor_digest=//p' "$ANCHOR_FILE")"
+  FPFIX_COMMIT="$(sed -n 's/^fingerprint_fix_commit=//p' "$ANCHOR_FILE")"
+  [[ -n "$ANCHOR_DIGEST" && -n "$FPFIX_COMMIT" ]] || \
+    fail "rollback-anchor.txt is missing anchor_digest or fingerprint_fix_commit"
+  assert_contains "$ROOT/STATUS.md" "$ANCHOR_DIGEST"
+  assert_contains "$ROOT/RUNBOOK.md" "$ANCHOR_DIGEST"
+  assert_contains "$ROOT/RUNBOOK.md" "$FPFIX_COMMIT"
+fi
+
+# Self-test of the private-doc guard's three states (mutants in a scratch
+# ROOT so the discriminator itself is exercised, not assumed).
+guard_selftest() {
+  local scratch missing_out
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/pmax-guard-selftest.XXXXXX")"
+  printf 'needle here\n' >"$scratch/present.md"
+  ( ROOT="$scratch" assert_private_doc "$scratch/present.md" "needle here" ) \
+    || fail "guard self-test: present file with needle must pass"
+  ( ROOT="$scratch" assert_private_doc "$scratch/present.md" "absent needle" ) \
+    && fail "guard self-test: present file without needle must fail"
+  missing_out="$( ROOT="$scratch" assert_private_doc "$scratch/missing.md" "x" )" \
+    || fail "guard self-test: missing file in export mode must SKIP"
+  [[ "$missing_out" == SKIP:* ]] || fail "guard self-test: export mode must print SKIP"
+  mkdir -p "$scratch/deployments"
+  ( ROOT="$scratch" assert_private_doc "$scratch/missing.md" "x" ) \
+    && fail "guard self-test: missing file in private tree must fail"
+  rm -rf "$scratch"
+  echo "PASS: private-doc guard self-test (present, export-missing, private-missing)"
+}
+guard_selftest
 assert_private_doc "$ROOT/STATUS.md" "pointer is self-referential"
 assert_private_doc "$ROOT/STATUS.md" "avoid the RUNBOOK rollback recipe"
 assert_private_doc "$ROOT/STATUS.md" \
@@ -708,10 +751,17 @@ workflows = pr_path.parent
 # v2.0.1: no trusted parity workflow ships; public CI is fixture-only and never
 # federates to GCP. Real-data parity runs from the operator's deploy ladder.
 assert not (workflows / "trusted.yml").exists(), "trusted.yml must not ship"
-for path in sorted(workflows.glob("*.yml")):
-    if path.name.startswith("."):
+assert not (workflows / "trusted.yaml").exists(), "trusted.yaml must not ship"
+workflow_paths = sorted(
+    p for ext in ("*.yml", "*.yaml") for p in workflows.glob(ext)
+)
+assert workflow_paths, "no workflow files found"
+for path in workflow_paths:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        # A non-UTF-8 sidecar (macOS AppleDouble) is not a workflow.
         continue
-    text = path.read_text(encoding="utf-8")
     assert "google-github-actions/auth" not in text, path
     assert "workload_identity_provider" not in text, path
     assert "id-token" not in text, path
