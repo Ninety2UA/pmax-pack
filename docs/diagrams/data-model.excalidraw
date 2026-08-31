@@ -20,7 +20,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 88,
+      "height": 116,
       "id": "api",
       "index": "a0",
       "isDeleted": false,
@@ -39,7 +39,7 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1317558468,
-      "width": 288,
+      "width": 216,
       "x": 70,
       "y": 70
     },
@@ -83,7 +83,7 @@
       "version": 1,
       "versionNonce": 1547038806,
       "width": 216,
-      "x": 470,
+      "x": 410,
       "y": 70
     },
     {
@@ -126,7 +126,7 @@
       "version": 1,
       "versionNonce": 657460356,
       "width": 264,
-      "x": 870,
+      "x": 750,
       "y": 70
     },
     {
@@ -169,8 +169,8 @@
       "version": 1,
       "versionNonce": 1682407594,
       "width": 228,
-      "x": 1270,
-      "y": 70
+      "x": 750,
+      "y": 260
     },
     {
       "angle": 0,
@@ -196,7 +196,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 88,
+      "height": 116,
       "id": "marts",
       "index": "a4",
       "isDeleted": false,
@@ -215,9 +215,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 885717561,
-      "width": 312,
-      "x": 1670,
-      "y": 70
+      "width": 216,
+      "x": 410,
+      "y": 260
     },
     {
       "angle": 0,
@@ -255,8 +255,8 @@
       "version": 1,
       "versionNonce": 1826935065,
       "width": 200,
-      "x": 2070,
-      "y": 70
+      "x": 70,
+      "y": 260
     },
     {
       "angle": 0,
@@ -294,8 +294,8 @@
       "version": 1,
       "versionNonce": 1018981380,
       "width": 252,
-      "x": 870,
-      "y": 420
+      "x": 70,
+      "y": 450
     },
     {
       "angle": 0,
@@ -317,7 +317,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 116,
+      "height": 144,
       "id": "rules",
       "index": "a7",
       "isDeleted": false,
@@ -336,9 +336,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1938965488,
-      "width": 312,
-      "x": 1270,
-      "y": 420
+      "width": 228,
+      "x": 410,
+      "y": 450
     },
     {
       "angle": 0,
@@ -360,7 +360,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 88,
+      "height": 144,
       "id": "scores",
       "index": "a8",
       "isDeleted": false,
@@ -379,9 +379,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 199423166,
-      "width": 348,
-      "x": 1670,
-      "y": 420
+      "width": 204,
+      "x": 750,
+      "y": 450
     },
     {
       "angle": 0,
@@ -394,7 +394,7 @@
       "fontSize": 20,
       "frameId": null,
       "groupIds": [],
-      "height": 50.0,
+      "height": 75.0,
       "id": "api-label",
       "index": "a9",
       "isDeleted": false,
@@ -402,23 +402,23 @@
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "Google Ads API\nGAQL families A to D",
+      "originalText": "Google Ads API\nGAQL families\nA to D",
       "roughness": 1,
       "roundness": null,
       "seed": 948509140,
       "strokeColor": "#1971C2",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "Google Ads API\nGAQL families A to D",
+      "text": "Google Ads API\nGAQL families\nA to D",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 1510289407,
       "verticalAlign": "middle",
-      "width": 240.0,
+      "width": 168.0,
       "x": 94.0,
-      "y": 89.0
+      "y": 90.5
     },
     {
       "angle": 0,
@@ -454,7 +454,7 @@
       "versionNonce": 977710521,
       "verticalAlign": "middle",
       "width": 168.0,
-      "x": 494.0,
+      "x": 434.0,
       "y": 89.0
     },
     {
@@ -491,7 +491,7 @@
       "versionNonce": 1715192258,
       "verticalAlign": "middle",
       "width": 215.99999999999997,
-      "x": 894.0,
+      "x": 774.0,
       "y": 89.0
     },
     {
@@ -528,8 +528,8 @@
       "versionNonce": 733959083,
       "verticalAlign": "middle",
       "width": 180.0,
-      "x": 1294.0,
-      "y": 90.5
+      "x": 774.0,
+      "y": 280.5
     },
     {
       "angle": 0,
@@ -542,7 +542,7 @@
       "fontSize": 20,
       "frameId": null,
       "groupIds": [],
-      "height": 50.0,
+      "height": 75.0,
       "id": "marts-label",
       "index": "aD",
       "isDeleted": false,
@@ -550,23 +550,23 @@
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "Additive marts\nperformance + entities",
+      "originalText": "Additive marts\nperformance +\nentities",
       "roughness": 1,
       "roundness": null,
       "seed": 1912736815,
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "Additive marts\nperformance + entities",
+      "text": "Additive marts\nperformance +\nentities",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 1889570686,
       "verticalAlign": "middle",
-      "width": 264.0,
-      "x": 1694.0,
-      "y": 89.0
+      "width": 168.0,
+      "x": 434.0,
+      "y": 280.5
     },
     {
       "angle": 0,
@@ -602,8 +602,8 @@
       "versionNonce": 40511704,
       "verticalAlign": "middle",
       "width": 144.0,
-      "x": 2098.0,
-      "y": 89.0
+      "x": 98.0,
+      "y": 279.0
     },
     {
       "angle": 0,
@@ -639,8 +639,8 @@
       "versionNonce": 1447421765,
       "verticalAlign": "middle",
       "width": 204.0,
-      "x": 894.0,
-      "y": 439.0
+      "x": 94.0,
+      "y": 469.0
     },
     {
       "angle": 0,
@@ -653,7 +653,7 @@
       "fontSize": 20,
       "frameId": null,
       "groupIds": [],
-      "height": 75.0,
+      "height": 100.0,
       "id": "rules-label",
       "index": "aG",
       "isDeleted": false,
@@ -661,23 +661,23 @@
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "Explicit rules mapping\nnot a dependency of\nthe daily marts",
+      "originalText": "Explicit rules\nmapping, not a\ndependency of\nthe daily marts",
       "roughness": 1,
       "roundness": null,
       "seed": 275364116,
       "strokeColor": "#7E22CE",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "Explicit rules mapping\nnot a dependency of\nthe daily marts",
+      "text": "Explicit rules\nmapping, not a\ndependency of\nthe daily marts",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 1103695343,
       "verticalAlign": "middle",
-      "width": 264.0,
-      "x": 1294.0,
-      "y": 440.5
+      "width": 180.0,
+      "x": 434.0,
+      "y": 472.0
     },
     {
       "angle": 0,
@@ -690,7 +690,7 @@
       "fontSize": 20,
       "frameId": null,
       "groupIds": [],
-      "height": 50.0,
+      "height": 100.0,
       "id": "scores-label",
       "index": "aH",
       "isDeleted": false,
@@ -698,23 +698,23 @@
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "Best-practice score marts\ncampaign + asset group",
+      "originalText": "Best-practice\nscore marts\ncampaign +\nasset group",
       "roughness": 1,
       "roundness": null,
       "seed": 1142469297,
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "Best-practice score marts\ncampaign + asset group",
+      "text": "Best-practice\nscore marts\ncampaign +\nasset group",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 1738615683,
       "verticalAlign": "middle",
-      "width": 300.0,
-      "x": 1694.0,
-      "y": 439.0
+      "width": 156.0,
+      "x": 774.0,
+      "y": 472.0
     },
     {
       "angle": 0,
@@ -731,7 +731,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 1.4210854715202004e-14,
+      "height": 4.447616632521928,
       "id": "edge-0-api-raw",
       "index": "aI",
       "isDeleted": false,
@@ -745,8 +745,8 @@
           0
         ],
         [
-          96,
-          1.4210854715202004e-14
+          108.01354678981852,
+          -4.447616632521928
         ]
       ],
       "roughness": 1,
@@ -766,9 +766,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 2088010651,
-      "width": 96.0,
-      "x": 366,
-      "y": 114
+      "width": 108.01354678981852,
+      "x": 293.99322660509074,
+      "y": 123.22380831626097
     },
     {
       "angle": 0,
@@ -799,7 +799,7 @@
           0
         ],
         [
-          168,
+          108,
           1.4210854715202004e-14
         ]
       ],
@@ -820,8 +820,8 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1440471118,
-      "width": 168.0,
-      "x": 694,
+      "width": 108.0,
+      "x": 634,
       "y": 114
     },
     {
@@ -839,7 +839,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 4.398299170414745,
+      "height": 86.06192239959393,
       "id": "edge-2-staging-intermediate",
       "index": "aK",
       "isDeleted": false,
@@ -853,8 +853,8 @@
           0
         ],
         [
-          120.01073450703097,
-          4.398299170414745
+          -7.593699035258396,
+          86.06192239959393
         ]
       ],
       "roughness": 1,
@@ -874,9 +874,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 73698897,
-      "width": 120.01073450703097,
-      "x": 1141.9946327464845,
-      "y": 119.1306933467298
+      "width": 7.593699035258396,
+      "x": 877.4144965764527,
+      "y": 165.96903880020304
     },
     {
       "angle": 0,
@@ -893,7 +893,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 4.941430498041868,
+      "height": 0.0,
       "id": "edge-3-intermediate-marts",
       "index": "aL",
       "isDeleted": false,
@@ -907,8 +907,8 @@
           0
         ],
         [
-          156.00802000960812,
-          -4.941430498041868
+          -108,
+          0
         ]
       ],
       "roughness": 1,
@@ -928,9 +928,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1916284768,
-      "width": 156.00802000960812,
-      "x": 1505.995989995196,
-      "y": 124.13587362006167
+      "width": 108.0,
+      "x": 742,
+      "y": 318
     },
     {
       "angle": 0,
@@ -947,7 +947,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 1.4210854715202004e-14,
+      "height": 4.989025994135318,
       "id": "edge-4-marts-views",
       "index": "aM",
       "isDeleted": false,
@@ -961,8 +961,8 @@
           0
         ],
         [
-          72,
-          1.4210854715202004e-14
+          -124.01293185422128,
+          -4.989025994135318
         ]
       ],
       "roughness": 1,
@@ -982,9 +982,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 786404773,
-      "width": 72.0,
-      "x": 1990,
-      "y": 114
+      "width": 124.01293185422128,
+      "x": 402.00646592711064,
+      "y": 313.3335934568378
     },
     {
       "angle": 0,
@@ -1001,7 +1001,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 246.02111730306032,
+      "height": 75.36070618977016,
       "id": "edge-5-marts-scores",
       "index": "aN",
       "isDeleted": false,
@@ -1015,8 +1015,8 @@
           0
         ],
         [
-          12.652514604157204,
-          246.02111730306032
+          123.38468562442745,
+          75.36070618977016
         ]
       ],
       "roughness": 1,
@@ -1036,9 +1036,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 747637531,
-      "width": 12.652514604157204,
-      "x": 1828.6737426979214,
-      "y": 165.98944134846985
+      "width": 123.38468562442745,
+      "x": 619.788049344649,
+      "y": 380.1699463063125
     },
     {
       "angle": 0,
@@ -1055,7 +1055,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 4.297950300766274,
+      "height": 6.151291139811065,
       "id": "edge-6-reference-rules",
       "index": "aO",
       "isDeleted": false,
@@ -1069,8 +1069,8 @@
           0
         ],
         [
-          132.0084735235373,
-          4.297950300766274
+          72.05798192350176,
+          6.151291139811065
         ]
       ],
       "roughness": 1,
@@ -1090,9 +1090,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 687929035,
-      "width": 132.0084735235373,
-      "x": 1129.9957632382313,
-      "y": 468.3626527565936
+      "width": 72.05798192350176,
+      "x": 329.9710090382491,
+      "y": 505.4365495520457
     },
     {
       "angle": 0,
@@ -1109,7 +1109,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 2.4117835706825304,
+      "height": 0.0,
       "id": "edge-7-rules-scores",
       "index": "aP",
       "isDeleted": false,
@@ -1123,8 +1123,8 @@
           0
         ],
         [
-          72.00896661037632,
-          -2.4117835706825304
+          96,
+          0
         ]
       ],
       "roughness": 1,
@@ -1144,9 +1144,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1642575815,
-      "width": 72.00896661037632,
-      "x": 1589.9955166948118,
-      "y": 472.50732719203984
+      "width": 96.0,
+      "x": 646,
+      "y": 522
     }
   ],
   "files": {},
