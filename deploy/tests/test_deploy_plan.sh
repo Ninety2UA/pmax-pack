@@ -694,7 +694,7 @@ test_parity_image_digest_gate() {
 
 test_parity_image_digest_gate
 
-uv run python - "$WORKFLOW" "$PR_WORKFLOW" <<'PY'
+uv run python - "$PR_WORKFLOW" <<'PY'
 from __future__ import annotations
 
 import re
@@ -703,51 +703,30 @@ from pathlib import Path
 
 import yaml
 
-trusted_path, pr_path = map(Path, sys.argv[1:])
-text = trusted_path.read_text(encoding="utf-8")
-data = yaml.safe_load(text)
-assert data["permissions"] == {"contents": "read"}
-job = data["jobs"]["trusted-parity"]
-id_key = "id-" + "token"
-assert job["permissions"] == {"contents": "read", id_key: "write"}
-assert f"{id_key}: write" in text
-assert "\\u0074" not in text
-assert job["if"] == "github.repository == 'Ninety2UA/pmax-pack'"
-assert job["environment"] == "trusted-parity"
-assert data["concurrency"]["cancel-in-progress"] is False
-assert "pmax-ci-scratch" in data["concurrency"]["group"]
-assert "pull_request_target" not in text
-assert "PMAX_CI_SCRATCH_PROJECT" in text
-assert "pmax-pack parity --source fixtures" in text
-assert "google-ads" not in text.lower()
-assert "service_account:" not in text
-
-uses = [line for line in text.splitlines() if "uses:" in line]
-assert uses
-for line in uses:
-    assert re.search(r"@[0-9a-f]{40}\s+#\s+v", line), line
-
-names = [step["name"] for step in job["steps"]]
-assert names.index("Gitleaks working tree") < names.index("Sync locked dependencies")
-assert names.index("Gitleaks git history") < names.index("Sync locked dependencies")
-dry_run = next(step for step in job["steps"] if step["name"] == "Manifest dry-runs and fixture parity (scratch)")
-assert "dry_run=True" in dry_run["run"]
-assert "maximum_bytes_billed" not in dry_run["run"]
-assert ".result()" not in dry_run["run"]
-execute = next(
-    step for step in job["steps"]
-    if step["name"] == "Execute manifest writes on explicit dispatch"
-)
-assert execute["if"] == "github.event_name == 'workflow_dispatch' && inputs.execute_manifest"
-assert "maximum_bytes_billed" in execute["run"]
-
-triggers = data.get("on", data.get(True))
-dispatch = triggers["workflow_dispatch"]
-assert dispatch["inputs"]["execute_manifest"]["default"] is False
+pr_path = Path(sys.argv[1])
+workflows = pr_path.parent
+# v2.0.1: no trusted parity workflow ships; public CI is fixture-only and never
+# federates to GCP. Real-data parity runs from the operator's deploy ladder.
+assert not (workflows / "trusted.yml").exists(), "trusted.yml must not ship"
+for path in sorted(workflows.glob("*.yml")):
+    if path.name.startswith("."):
+        continue
+    text = path.read_text(encoding="utf-8")
+    assert "google-github-actions/auth" not in text, path
+    assert "workload_identity_provider" not in text, path
+    assert "id-token" not in text, path
+    assert "pull_request_target" not in text, path
+    assert "google-ads" not in text.lower(), path
+    uses = [line for line in text.splitlines() if "uses:" in line]
+    assert uses, path
+    for line in uses:
+        assert re.search(r"@[0-9a-f]{40}\s+#\s+v", line), line
 
 pr = yaml.safe_load(pr_path.read_text(encoding="utf-8"))
+assert pr["permissions"] == {"contents": "read"}
 triggers = pr.get("on", pr.get(True))
 assert "main" in triggers["push"]["branches"]
+assert "pull_request" in triggers
 PY
 
 (cd "$ROOT" && uv run pytest -q tests/unit/test_scrub_check.py \

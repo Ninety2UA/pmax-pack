@@ -14,8 +14,8 @@ bindings only through the human-owned IAM and WIF phases after reviewing
 | `pmax-runtime` | report bucket | `storage.objectUser` |
 | `pmax-runtime` | config bucket | `storage.objectViewer` |
 | `pmax-invoker` | `pmax-pack-daily` only | `run.invoker` |
-| Trusted workflow WIF principal set | Project | `bigquery.jobUser` |
-| Trusted workflow WIF principal set | CI scratch pair only | `bigquery.dataEditor` |
+| WIF principal set (retained, no workflow bound since v2.0.1) | Project | `bigquery.jobUser` |
+| WIF principal set (retained, no workflow bound since v2.0.1) | CI scratch pair only | `bigquery.dataEditor` |
 | `pmax-build` | Project | `artifactregistry.writer`, `logging.logWriter` |
 | Deployer | runtime SA | `iam.serviceAccountUser` |
 | Deployer | one secret | `secretmanager.secretVersionAdder` |
@@ -24,10 +24,11 @@ bindings only through the human-owned IAM and WIF phases after reviewing
 | Named operator | one secret | `secretmanager.secretAccessor` |
 
 Runtime has no writer role on parity scratch, CI scratch, or snapshots. The
-trusted workflow principal set has no credential, bucket, raw, mart, ops,
-parity, snapshot, verification, or Secret Manager role. It does not
-impersonate a service account. Deployer never receives token creator on
-runtime.
+WIF principal set has no credential, bucket, raw, mart, ops, parity,
+snapshot, verification, or Secret Manager role, does not impersonate a
+service account, and since v2.0.1 has no GitHub workflow bound to it (public
+CI is fixture-only and never federates). Deployer never receives token
+creator on runtime.
 
 ## Credential model
 
@@ -56,24 +57,29 @@ The provider maps `sub`, `repository_id`, `repository_owner_id`, `ref`, and
 - workflow ref is exactly
   `Ninety2UA/pmax-pack/.github/workflows/trusted.yml@refs/heads/main`.
 
-The environment `trusted-parity` requires a reviewer. Forks and pull requests
+Since v2.0.1 no workflow in the public repository matches this condition:
+the trusted parity workflow was retired, so the provider grants nothing until
+a workflow with exactly that ref is published again. Forks and pull requests
 receive no cloud identity. Outside-collaborator Actions require approval.
 Third-party actions use full commit SHAs. Never use `pull_request_target`.
-The auth action exchanges GitHub OIDC directly for this federated principal.
-There is no `service_account` input and no `roles/iam.workloadIdentityUser`
-bridge.
+If the workflow returns, the auth action exchanges GitHub OIDC directly for
+this federated principal with no `service_account` input and no
+`roles/iam.workloadIdentityUser` bridge; otherwise remove the pool with the
+decommission checklist.
 
 ## Mandatory negative probes
 
 Run these in U8 and retain the denied result:
 
 1. Deployer cannot mint a runtime access token or access the credential secret.
-2. The trusted workflow principal cannot access the secret, report bucket,
-   config bucket, parity scratch, raw, marts, ops, snapshots, or verification
-   dataset.
+2. Retired in v2.0.1 (no workflow federates): the WIF principal set cannot
+   access the secret, report bucket, config bucket, parity scratch, raw,
+   marts, ops, snapshots, or verification dataset. Re-run only if a workflow
+   is bound again.
 3. Runtime cannot write parity scratch, CI scratch, or snapshots.
 4. Invoker cannot invoke another Job or read any data.
-5. A token from another repository, owner, ref, or workflow cannot federate.
+5. Retired in v2.0.1 with probe 2: a token from another repository, owner,
+   ref, or workflow cannot federate. Re-run only if a workflow is bound again.
 6. An over-cap query by any identity (the cap is per user, project-wide; Google does not support a per-principal override on this metric) is rejected and the quota alert fires.
 
 ## Audit and alert contract

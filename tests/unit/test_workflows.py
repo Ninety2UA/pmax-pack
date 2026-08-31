@@ -5,7 +5,6 @@ import re
 from pathlib import Path
 
 import yaml
-import ast
 
 PRODUCT = Path(__file__).resolve().parents[2]
 WORKFLOW = PRODUCT / ".github" / "workflows" / "pr.yml"
@@ -73,7 +72,7 @@ def test_deploy_harness_runs_after_unit_tests() -> None:
     assert names.index("Unit tests") < names.index("Deploy harness")
 
 
-def test_dataset_reference_lint_runs_in_pr_and_trusted_workflows():
+def test_dataset_reference_lint_runs_in_pr_workflow():
     expected_command = "uv run python scripts/lint_dataset_refs.py"
 
     pr_data = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
@@ -84,57 +83,16 @@ def test_dataset_reference_lint_runs_in_pr_and_trusted_workflows():
         "Render SQL templates and parse with sqlglot"
     )
 
-    trusted_data = yaml.safe_load(TRUSTED_WORKFLOW.read_text(encoding="utf-8"))
-    trusted_steps = trusted_data["jobs"]["trusted-parity"]["steps"]
-    trusted_names = [step["name"] for step in trusted_steps]
-    assert expected_command in [step.get("run") for step in trusted_steps]
-    assert trusted_names.index("Lint SQL dataset references") < trusted_names.index(
-        "Authenticate by direct WIF"
-    )
-    assert trusted_names.index("Lint SQL dataset references") < trusted_names.index(
-        "Manifest dry-runs and fixture parity (scratch)"
-    )
 
-
-def test_trusted_fixture_cleanup_uses_caller_owned_table_mapping() -> None:
-    data = yaml.safe_load(TRUSTED_WORKFLOW.read_text(encoding="utf-8"))
-    step = next(
-        item
-        for item in data["jobs"]["trusted-parity"]["steps"]
-        if item["name"] == "Manifest dry-runs and fixture parity (scratch)"
-    )
-    run = step["run"]
-    marker = "uv run python - <<'PY'\n"
-    assert marker in run
-    python = run.split(marker, 1)[1].rsplit("\nPY", 1)[0]
-    tree = ast.parse(python)
-
-    fixture_calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "run_fixture_parity_bq"
-    ]
-    assert len(fixture_calls) == 1
-    assert any(
-        keyword.arg == "created_tables"
-        and isinstance(keyword.value, ast.Name)
-        and keyword.value.id == "created_tables"
-        for keyword in fixture_calls[0].keywords
-    )
-
-    cleanup_calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "cleanup_scratch"
-    ]
-    assert len(cleanup_calls) == 1
-    assert len(cleanup_calls[0].args) == 3
-    assert isinstance(cleanup_calls[0].args[2], ast.Name)
-    assert cleanup_calls[0].args[2].id == "created_tables"
-    assert "original_cleanup" not in python
-    assert 'created_tables["pmax_ci_scratch"].add(OPS_TABLES[name].name)' in python
-    assert 'created_tables["pmax_ci_scratch"].add(OBSERVATION_TABLE.name)' in python
+def test_no_workflow_federates_to_gcp() -> None:
+    # v2.0.1 dropped the trusted parity workflow: public CI is fixture-only and
+    # never requests an OIDC token or a GCP credential. Real-data parity runs
+    # from the operator's deploy ladder (phase 80).
+    assert not TRUSTED_WORKFLOW.exists()
+    for path in sorted(WORKFLOW.parent.glob("*.yml")):
+        if path.name.startswith("."):
+            continue
+        text = path.read_text(encoding="utf-8")
+        assert "google-github-actions/auth" not in text, path
+        assert "id-token" not in text, path
+        assert "workload_identity_provider" not in text, path

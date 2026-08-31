@@ -253,7 +253,7 @@ def test_operations_docs_bound_lint_to_sql_templates():
     text = " ".join(OPERATIONS.read_text(encoding="utf-8").split())
 
     assert (
-        "Both CI paths lint SQL template dataset references under "
+        "Public CI lints SQL template dataset references under "
         "`src/pmax_pack/sql`; Python-embedded SQL is outside this lint's scope."
     ) in text
 

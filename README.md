@@ -41,10 +41,11 @@ plus a report and an append-only observation backup.
 
 [Edit the architecture scene](docs/diagrams/architecture.excalidraw)
 
-The runtime image is pinned by digest. Pull-request and fork CI receive no
-credentials and use sanitized fixtures only. Real-data parity runs only from a
-protected operator execution and drops the scratch tables it created after the
-run. The scratch datasets persist.
+The runtime image is pinned by digest. Public CI (pull requests, pushes to
+`main`, forks) receives no credentials, never federates to Google Cloud, and
+uses sanitized fixtures only. Real-data parity runs only from the operator's
+deploy ladder or a manual `pmax-pack parity --source live` and drops the
+scratch tables it created after the run. The scratch datasets persist.
 
 ## Data model
 
