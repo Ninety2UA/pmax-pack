@@ -5,459 +5,1147 @@
   },
   "elements": [
     {
+      "angle": 0,
       "backgroundColor": "#E7F5FF",
-      "createdAt": "2026-08-31T13:29:38.663Z",
+      "boundElements": [
+        {
+          "id": "lag-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-0-lag-prefix",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "lag",
-      "label": {
-        "text": "Conversion-lag buckets\ncampaign + asset group"
-      },
+      "index": "a0",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 1409584659,
       "strokeColor": "#1971C2",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "width": 268,
+      "versionNonce": 1609168251,
+      "width": 312,
       "x": 70,
       "y": 70
     },
     {
+      "angle": 0,
       "backgroundColor": "#F4F4F5",
-      "createdAt": "2026-08-31T13:29:38.663Z",
+      "boundElements": [
+        {
+          "id": "prefix-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-0-lag-prefix",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-1-prefix-bucket-cells",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "prefix",
-      "label": {
-        "text": "Bucket reading\nprefix through day D"
-      },
+      "index": "a1",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 275038666,
       "strokeColor": "#52525B",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "width": 248,
-      "x": 420,
+      "versionNonce": 547553092,
+      "width": 288,
+      "x": 470,
       "y": 70
     },
     {
+      "angle": 0,
       "backgroundColor": "#D1FAE5",
-      "createdAt": "2026-08-31T13:29:38.663Z",
+      "boundElements": [
+        {
+          "id": "bucket-cells-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-1-prefix-bucket-cells",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-4-bucket-cells-contract",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "bucket-cells",
-      "label": {
-        "text": "Measured cohort cells\nby lag boundary"
-      },
+      "index": "a2",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 1185274268,
       "strokeColor": "#047857",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "width": 258,
-      "x": 770,
+      "versionNonce": 578603677,
+      "width": 300,
+      "x": 870,
       "y": 70
     },
     {
+      "angle": 0,
       "backgroundColor": "#E7F5FF",
-      "createdAt": "2026-08-31T13:29:38.663Z",
+      "boundElements": [
+        {
+          "id": "observations-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-2-observations-snapshot",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "observations",
-      "label": {
-        "text": "Append-only observations\nasset cumulative values"
-      },
+      "index": "a3",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 58178768,
       "strokeColor": "#1971C2",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "width": 288,
+      "versionNonce": 1565726019,
+      "width": 336,
       "x": 70,
       "y": 420
     },
     {
+      "angle": 0,
       "backgroundColor": "#F4F4F5",
-      "createdAt": "2026-08-31T13:29:38.663Z",
+      "boundElements": [
+        {
+          "id": "snapshot-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-2-observations-snapshot",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-3-snapshot-asset-cells",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 116,
       "id": "snapshot",
-      "label": {
-        "text": "Snapshot reading\nvalue seen on\nclick date + D"
-      },
+      "index": "a4",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 117804614,
       "strokeColor": "#52525B",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "width": 208,
-      "x": 420,
+      "versionNonce": 1153126656,
+      "width": 240,
+      "x": 470,
       "y": 420
     },
     {
+      "angle": 0,
       "backgroundColor": "#D1FAE5",
-      "createdAt": "2026-08-31T13:29:38.663Z",
+      "boundElements": [
+        {
+          "id": "asset-cells-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-3-snapshot-asset-cells",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-5-asset-cells-contract",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 116,
       "id": "asset-cells",
-      "label": {
-        "text": "Measured or carried\ncohort cells\nmaximum five-day carry"
-      },
+      "index": "a5",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 1740073905,
       "strokeColor": "#047857",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "width": 268,
-      "x": 770,
+      "versionNonce": 1728218202,
+      "width": 312,
+      "x": 870,
       "y": 420
     },
     {
+      "angle": 0,
       "backgroundColor": "#F3E8FF",
-      "createdAt": "2026-08-31T13:29:38.663Z",
+      "boundElements": [
+        {
+          "id": "contract-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-4-bucket-cells-contract",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-5-asset-cells-contract",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-6-contract-cohort-marts",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 116,
       "id": "contract",
-      "label": {
-        "text": "Window + provenance\nmaturity +\nobserved-through"
-      },
+      "index": "a6",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 2099270995,
       "strokeColor": "#7E22CE",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "width": 238,
-      "x": 1120,
+      "versionNonce": 689737776,
+      "width": 276,
+      "x": 1270,
       "y": 245
     },
     {
+      "angle": 0,
       "backgroundColor": "#D1FAE5",
-      "createdAt": "2026-08-31T13:29:38.663Z",
+      "boundElements": [
+        {
+          "id": "cohort-marts-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-6-contract-cohort-marts",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-7-cohort-marts-ratios",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "cohort-marts",
-      "label": {
-        "text": "Additive cohort marts\nfixed click-day cost"
-      },
+      "index": "a7",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 597593861,
       "strokeColor": "#047857",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "width": 258,
-      "x": 1470,
+      "versionNonce": 726325803,
+      "width": 300,
+      "x": 1670,
       "y": 245
     },
     {
+      "angle": 0,
       "backgroundColor": "#FEF3C7",
-      "createdAt": "2026-08-31T13:29:38.663Z",
+      "boundElements": [
+        {
+          "id": "ratios-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-7-cohort-marts-ratios",
+          "type": "arrow"
+        }
+      ],
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 88,
+      "id": "ratios",
+      "index": "a8",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "roughness": 1,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1864221575,
+      "strokeColor": "#B45309",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "type": "rectangle",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 674282347,
+      "width": 252,
+      "x": 2070,
+      "y": 245
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "lag",
       "fillStyle": "solid",
       "fontFamily": 5,
       "fontSize": 20,
-      "height": 88,
-      "id": "ratios",
-      "label": {
-        "text": "Cohort CPA + ROAS\nratio views"
-      },
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "lag-label",
+      "index": "a9",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Conversion-lag buckets\ncampaign + asset group",
       "roughness": 1,
-      "roundness": {
-        "type": 3
-      },
+      "roundness": null,
+      "seed": 265536974,
+      "strokeColor": "#1971C2",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Conversion-lag buckets\ncampaign + asset group",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 659590233,
+      "verticalAlign": "middle",
+      "width": 264.0,
+      "x": 94.0,
+      "y": 89.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "prefix",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "prefix-label",
+      "index": "aA",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Bucket reading\nprefix through day D",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 754226606,
+      "strokeColor": "#52525B",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Bucket reading\nprefix through day D",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 1782696529,
+      "verticalAlign": "middle",
+      "width": 240.0,
+      "x": 494.0,
+      "y": 89.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "bucket-cells",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "bucket-cells-label",
+      "index": "aB",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Measured cohort cells\nby lag boundary",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1632002790,
+      "strokeColor": "#047857",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Measured cohort cells\nby lag boundary",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 311144708,
+      "verticalAlign": "middle",
+      "width": 252.0,
+      "x": 894.0,
+      "y": 89.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "observations",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "observations-label",
+      "index": "aC",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Append-only observations\nasset cumulative values",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 839020277,
+      "strokeColor": "#1971C2",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Append-only observations\nasset cumulative values",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 384218326,
+      "verticalAlign": "middle",
+      "width": 288.0,
+      "x": 94.0,
+      "y": 439.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "snapshot",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 75.0,
+      "id": "snapshot-label",
+      "index": "aD",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Snapshot reading\nvalue seen on\nclick date + D",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 97954566,
+      "strokeColor": "#52525B",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Snapshot reading\nvalue seen on\nclick date + D",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 845530037,
+      "verticalAlign": "middle",
+      "width": 192.0,
+      "x": 494.0,
+      "y": 440.5
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "asset-cells",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 75.0,
+      "id": "asset-cells-label",
+      "index": "aE",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Measured or carried\ncohort cells\nmaximum five-day carry",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 316245817,
+      "strokeColor": "#047857",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Measured or carried\ncohort cells\nmaximum five-day carry",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 68477348,
+      "verticalAlign": "middle",
+      "width": 264.0,
+      "x": 894.0,
+      "y": 440.5
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "contract",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 75.0,
+      "id": "contract-label",
+      "index": "aF",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Window + provenance\nmaturity +\nobserved-through",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1717748972,
+      "strokeColor": "#7E22CE",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Window + provenance\nmaturity +\nobserved-through",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 1926855868,
+      "verticalAlign": "middle",
+      "width": 228.0,
+      "x": 1294.0,
+      "y": 265.5
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "cohort-marts",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "cohort-marts-label",
+      "index": "aG",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Additive cohort marts\nfixed click-day cost",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1686074093,
+      "strokeColor": "#047857",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Additive cohort marts\nfixed click-day cost",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 89936284,
+      "verticalAlign": "middle",
+      "width": 252.0,
+      "x": 1694.0,
+      "y": 264.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "ratios",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "ratios-label",
+      "index": "aH",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Cohort CPA + ROAS\nratio views",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1297941639,
       "strokeColor": "#B45309",
-      "strokeWidth": 2,
-      "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Cohort CPA + ROAS\nratio views",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
       "version": 1,
-      "width": 218,
-      "x": 1820,
-      "y": 245
+      "versionNonce": 680721324,
+      "verticalAlign": "middle",
+      "width": 204.0,
+      "x": 2094.0,
+      "y": 264.0
     },
     {
-      "createdAt": "2026-08-31T13:29:38.663Z",
-      "end": {
-        "id": "prefix"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "prefix",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 1.4210854715202004e-14,
       "id": "edge-0-lag-prefix",
+      "index": "aI",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          66,
+          72,
           1.4210854715202004e-14
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "lag"
+      "roundness": null,
+      "seed": 1516882856,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "lag",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "x": 346,
+      "versionNonce": 55898682,
+      "width": 72.0,
+      "x": 390,
       "y": 114
     },
     {
-      "createdAt": "2026-08-31T13:29:38.663Z",
-      "end": {
-        "id": "bucket-cells"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "bucket-cells",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 1.4210854715202004e-14,
       "id": "edge-1-prefix-bucket-cells",
+      "index": "aJ",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          86,
+          96,
           1.4210854715202004e-14
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "prefix"
+      "roundness": null,
+      "seed": 1951618003,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "prefix",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "x": 676,
+      "versionNonce": 1143824406,
+      "width": 96.0,
+      "x": 766,
       "y": 114
     },
     {
-      "createdAt": "2026-08-31T13:29:38.663Z",
-      "end": {
-        "id": "snapshot"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "snapshot",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 1.9095936349544331,
       "id": "edge-2-observations-snapshot",
+      "index": "aK",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          46.01629142110005,
-          2.078155096436774
+          48.01263996456896,
+          1.9095936349544331
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "observations"
+      "roundness": null,
+      "seed": 1066383574,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "observations",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "x": 365.99185428945,
-      "y": 470.86414825823323
+      "versionNonce": 881608818,
+      "width": 48.01263996456896,
+      "x": 413.9936800177155,
+      "y": 470.99974863706825
     },
     {
-      "createdAt": "2026-08-31T13:29:38.663Z",
-      "end": {
-        "id": "asset-cells"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "asset-cells",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 0.0,
       "id": "edge-3-snapshot-asset-cells",
+      "index": "aL",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          126,
+          144,
           0
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "snapshot"
+      "roundness": null,
+      "seed": 1358700736,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "snapshot",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "x": 636,
+      "versionNonce": 1077382843,
+      "width": 144.0,
+      "x": 718,
       "y": 478
     },
     {
-      "createdAt": "2026-08-31T13:29:38.663Z",
-      "end": {
-        "id": "contract"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "contract",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 79.99325748181195,
       "id": "edge-4-bucket-cells-contract",
+      "index": "aM",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          142.52336067246085,
-          79.22622107969153
+          164.21896244943423,
+          79.99325748181195
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "bucket-cells"
+      "roundness": null,
+      "seed": 57850610,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "bucket-cells",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "x": 985.145727071177,
-      "y": 161.88688946015424
+      "versionNonce": 137580961,
+      "width": 164.21896244943423,
+      "x": 1117.5201484049126,
+      "y": 161.50337125909402
     },
     {
-      "createdAt": "2026-08-31T13:29:38.663Z",
-      "end": {
-        "id": "contract"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "contract",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 52.33614712158703,
       "id": "edge-5-asset-cells-contract",
+      "index": "aN",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          98.76127557157963,
-          -51.59171111948194
+          114.24233257397827,
+          -52.33614712158703
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "asset-cells"
+      "roundness": null,
+      "seed": 1774345151,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "asset-cells",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "x": 1022.1193622142101,
-      "y": 416.29585555974097
+      "versionNonce": 3464301,
+      "width": 114.24233257397827,
+      "x": 1159.8788337130109,
+      "y": 416.6680735607935
     },
     {
-      "createdAt": "2026-08-31T13:29:38.663Z",
-      "end": {
-        "id": "cohort-marts"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "cohort-marts",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 3.670216534636836,
       "id": "edge-6-contract-cohort-marts",
+      "index": "aO",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          96.01208505956765,
-          -3.7338033078719945
+          108.00922944788408,
+          -3.670216534636836
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "contract"
+      "roundness": null,
+      "seed": 292503138,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "contract",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:38.663Z",
+      "updated": 1,
       "version": 1,
-      "x": 1365.9939574702162,
-      "y": 298.06134609838045
+      "versionNonce": 2016337761,
+      "width": 108.00922944788408,
+      "x": 1553.995385276058,
+      "y": 298.03899176246404
     },
     {
-      "createdAt": "2026-08-31T13:29:38.664Z",
-      "end": {
-        "id": "ratios"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "ratios",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 0.0,
       "id": "edge-7-cohort-marts-ratios",
+      "index": "aP",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          76,
+          84,
           0
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "cohort-marts"
+      "roundness": null,
+      "seed": 764969527,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "cohort-marts",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:38.664Z",
+      "updated": 1,
       "version": 1,
-      "x": 1736,
+      "versionNonce": 1662225830,
+      "width": 84.0,
+      "x": 1978,
       "y": 289
     }
   ],

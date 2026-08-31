@@ -1198,8 +1198,17 @@ def test_data_model_documents_grains_current_bounds_and_mapping_honesty() -> Non
         "campaignbpscore_",
     ):
         assert ungrounded not in doc
-    assert "02 | TODO-U4" in doc
-    assert "03 | TODO-U4" in doc
+    fork_table = doc.split("## Current fork transformation mapping", 1)[1]
+    assert "TODO-U4" not in doc
+    assert not re.search(r"\bU\d+\b", fork_table)
+    assert (
+        "| `bq_queries/02-primary_conversion_action_pmax.sql` | Pinned parity "
+        "intermediate; mapped without a separate output table |"
+    ) in fork_table
+    assert (
+        "| `bq_queries/03-primary_conversion_action_search.sql` | Pinned parity "
+        "intermediate; mapped without a separate output table |"
+    ) in fork_table
     assert "primary-action" in doc
 
 

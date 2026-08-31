@@ -12,11 +12,12 @@ validation report after every run.
 ## What it adds
 
 The pack is an independent solution. Google's open-source work remains visible
-and attributed, but it is not a runtime dependency.
+and attributed, but it is not a dependency of the daily marts. The parity
+harness executes the pinned chain, and every report records its reference hash.
 
 | Starting point | What the pack adds |
 |---|---|
-| pMaximizer | Pinned reference queries and an explicit rules mapping, then an independently testable Python and BigQuery runtime. The pack adds typed entity history, additive performance marts, cohort CPA and ROAS, provenance, and validation. |
+| pMaximizer | Pinned reference queries and an explicit rules mapping, then an independently testable Python and BigQuery daily runtime. The parity harness still executes Google's chain. The pack adds typed entity history, additive performance marts, cohort CPA and ROAS, provenance, and validation. |
 | App Reporting Pack (ARP) | The same useful raw-to-output mental model, purpose-built for Performance Max. The pack adds a single Cloud Run Job, a phase-gated deploy, digest and secret-version pinning, lease and checkpoint controls, and evidence-bound release gates. |
 | Platform reporting | Durable data at campaign, asset-group, and asset grain. Ratios are calculated after aggregation, and missing or immature cohort cells stay visible instead of being blended away. |
 
@@ -32,9 +33,9 @@ Our code, Google's reference material, tests, and CI remain separate:
 ## Architecture
 
 One private Cloud Run Job owns the daily data path. Cloud Scheduler starts it
-in the account timezone. The Job reads a private config object, mounts one
-numeric Secret Manager version, and writes BigQuery datasets plus a report and
-an append-only observation backup.
+at 04:00 in the configured deployment timezone. The Job reads a private config
+object, mounts one numeric Secret Manager version, and writes BigQuery datasets
+plus a report and an append-only observation backup.
 
 ![pMax Performance Pack architecture](docs/diagrams/architecture.svg)
 
@@ -42,13 +43,16 @@ an append-only observation backup.
 
 The runtime image is pinned by digest. Pull-request and fork CI receive no
 credentials and use sanitized fixtures only. Real-data parity runs only from a
-protected operator execution and cleans its scratch dataset after the run.
+protected operator execution and drops the scratch tables it created after the
+run. The scratch datasets persist.
 
 ## Data model
 
 Think of the layers like a spreadsheet:
 
-- Raw tables are the diary. They preserve what was landed and when.
+- Raw partitions keep the latest landed copy for each table and day, with
+  `loaded_at` and `run_id`. The append-only `raw_observations` table is the
+  diary for cumulative asset observations.
 - Staging and intermediate layers are formula sheets. They select the latest
   row per key, type it, and attach lineage and provenance.
 - Marts are the nightly answer sheets. Their measures stay additive.
@@ -62,16 +66,22 @@ Think of the layers like a spreadsheet:
 The current fork-table mapping keeps the recognizable pMaximizer outputs while
 moving them onto the v2 contracts:
 
-| Pinned fork query | v2 contract |
-|---|---|
-| 01 `image_assets` | `mart_entities_asset`, image URL, dimensions, and orientation |
-| 04 `text_assets` | `mart_entities_asset`, text and field-type rows |
-| 05 `video_assets` | `mart_entities_asset`, video ID, title, and orientation |
-| 07 `campaign_data` | Campaign, asset-group signal, campaign-asset, and customer entity marts |
-| 09 `bpscore` | `mart_bp_campaign` |
-| 10 `assetgroupbestpractices` | `mart_bp_asset_group` |
-| 12 `campaign_settings` | Campaign entity settings plus `mart_bp_campaign` scores |
-| 19 `assetgroupperformance` | Additive metrics in `mart_performance_asset_group`; the constant performance label is deliberately dropped |
+| Upstream fork query | Scope | v2 contract |
+|---|---|---|
+| `bq_queries/01-image_assets.sql` | Pinned BigQuery chain | `mart_entities_asset`, image URL, dimensions, and orientation |
+| `bq_queries/02-primary_conversion_action_pmax.sql` | Pinned parity intermediate | Named actions and windows remain in `mart_entities_conversion_action`; no frequency-selected table is published |
+| `bq_queries/03-primary_conversion_action_search.sql` | Pinned parity intermediate | Named actions and windows remain in `mart_entities_conversion_action`; no frequency-selected table is published |
+| `bq_queries/04-text_assets.sql` | Pinned BigQuery chain | `mart_entities_asset`, text and field-type rows |
+| `bq_queries/05-video_assets.sql` | Pinned BigQuery chain | `mart_entities_asset`, video ID, title, and orientation |
+| `bq_queries/07-campaign_data.sql` | Pinned BigQuery chain | Campaign, asset-group signal, campaign-asset, and customer entity marts |
+| `bq_queries/09-bpscore.sql` | Pinned BigQuery chain | `mart_bp_campaign` |
+| `bq_queries/10-assetgroupbestpractices.sql` | Pinned BigQuery chain | `mart_bp_asset_group` |
+| `google_ads_queries/campaign_settings.sql` | Pinned, unnumbered GAQL input | Campaign entity settings plus `mart_bp_campaign` scores |
+| `assetgroupperformance` | Upstream output outside the current pin | Additive metrics in `mart_performance_asset_group`; the constant performance label is deliberately dropped |
+
+`assetgroupperformance` is a legacy upstream mapping, not a file in the current
+pin. The pack makes no file-level parity claim for transformations outside that
+pin.
 
 The detailed grain, partition, clustering, money, provenance, and ratio
 contracts live in [docs/data-model.md](docs/data-model.md). Asset attributions
@@ -115,8 +125,11 @@ contract.
 ## Deploy with one command
 
 Requirements: Python 3.12 through `uv`, Google Cloud CLI, `bq`, Docker buildx,
-shellcheck, an existing billed GCP project in `europe-west1`, and an
-operator-owned Google Ads credential file outside the repository.
+and an existing billed GCP project in `europe-west1` labelled `app=pmax`. The
+organization policy `iam.disableServiceAccountKeyCreation` must be enforced,
+the config must set `timezone_override`, and the operator-owned Google Ads
+credential file must stay outside the repository. Shellcheck is useful for
+development, but the deploy ladder does not invoke it.
 
 Review the non-mutating plan first:
 
@@ -146,17 +159,17 @@ The phases are ordered so evidence arrives before authority:
 
 | Phases | Result |
 |---|---|
-| 00 to 30 | Preflight, APIs, data resources, cost dry-run, and pinned secret |
+| 00 to 30 | Preflight, APIs, data resources, upgrade-only cost dry-run, and pinned secret |
 | 40 to 65 | IAM, WIF, image build or digest reuse, invoker, paused Scheduler, and config record |
 | 70 to 80 | First run, lease drill, and parity evidence |
 | 85 | Human review of the persisted report and evidence |
 | 88 to 95 | Rehearsal, failed-execution alert proof, and operator-owned resume |
 
-Phase 85 may never appear in `PMAX_CONFIRMED_PHASES`. In a terminal it pauses
-for the operator. In a non-interactive run it accepts only
-`PMAX_SIGNED_REVIEW`, a file personally authored by the operator and bound to
-the exact run, image digest, report, parity evidence, and review time. Agents
-and automation must never create or supply that file.
+Phase 85 may never appear in `PMAX_CONFIRMED_PHASES`. It validates
+`PMAX_SIGNED_REVIEW` first and pauses for the operator unless a valid signed
+file is supplied. That file is personally authored by the operator and bound
+to the exact run, image digest, report, parity evidence, and review time.
+Agents and automation must never create or supply it.
 
 ## Daily operation
 
@@ -167,14 +180,16 @@ and automation must never create or supply that file.
 The daily Job acquires a lease before it writes. A concurrent execution exits
 `SKIPPED`. Successful chunks record checkpoints, so a retry resumes from
 persisted work. Every eligible click day in the re-pull window is rebuilt in
-one atomic statement per table. Reports land under
-`reports/<deployment>/<run_id>.md`; only a successful non-SKIPPED run advances
-`latest.md`.
+one transaction per table; a manifest step can update more than one table in a
+single transaction. Reports land under `reports/<deployment>/<run_id>.md`.
+Every executed daily `run`, PASS or FAIL, replaces `latest.md`. SKIPPED runs,
+rebuilds, and backfills leave it alone.
 
 The observation log is append-only and backed up separately from report
 retention. Alerting watches failed Cloud Run executions. Operators should
-inspect the report, stale-cell counts, missing-cost counts, parity age, and
-checkpoint drain before treating a run as healthy. See
+inspect the report's stale cells, null-cost cells, frozen chunks, and parity
+staleness before treating a run as healthy. Phase 70 checks checkpoint drain
+directly in the ledger; it is not a report section. See
 [docs/operations.md](docs/operations.md) for upgrades, rollback, rotation, and
 restore behavior.
 
@@ -194,15 +209,18 @@ contain generated IDs and values.
 
 ## Cost reference
 
-The deployment fence is a **50 GiB per-user daily BigQuery query cap**. On the
-measured one-account allowlist, a normal daily run takes about **40 minutes**.
-A verification rebuild takes about **7 minutes**. Treat these as reference
-measurements, not a promise: account history, action windows, entity volume,
-and BigQuery minimum billing can move both time and bytes.
+The operator sets the per-user daily BigQuery query cap in phase 45 from a
+measured `PMAX_CI_DAILY_QUERY_QUOTA_MIB` value. The reference deployment used
+**50 GiB**. Measurements from that one-account deployment on 2026-08-31 were
+about **40 minutes** for a daily run and about **7 minutes** for a verification
+rebuild. These are not product constants: account history, action windows,
+entity volume, and BigQuery minimum billing can move both time and bytes.
 
 Run `rebuild --dry-run` before a wider window or schema change. It issues no
 billed reads and reports an upper-bound estimate using the configured cohort
-window plus restatement margin.
+window plus restatement margin. Point it at a verification dataset. With
+`--target-dataset` set to the live marts, the command acquires the production
+lease and can either SKIP the daily Job or be skipped by it.
 
 ## Local checks
 

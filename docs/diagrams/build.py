@@ -25,6 +25,8 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ET
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -39,13 +41,14 @@ PALETTE = {
     "output": ("#FEF3C7", "#B45309"),
     "control": ("#F3E8FF", "#7E22CE"),
 }
-GRID_X = 350
+GRID_X = 400
 GRID_Y = 175
 ORIGIN_X = 70
 ORIGIN_Y = 70
 BOX_MIN_WIDTH = 200
 BOX_HEIGHT = 84
 BOX_GAP = 42
+BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 
 class CanvasError(RuntimeError):
@@ -84,7 +87,13 @@ DIAGRAMS = (
             Node("raw", "BigQuery raw\nlanded GAQL families", 2, 1, "data"),
             Node("marts", "Staging + intermediates\nadditive marts + views", 3, 1, "data"),
             Node("report", "Validation report\nand observation backup", 4, 1, "output"),
-            Node("scheduler", "Cloud Scheduler\n04:00 account timezone", 1, 0, "control"),
+            Node(
+                "scheduler",
+                "Cloud Scheduler\n04:00 configured deployment timezone",
+                1,
+                0,
+                "control",
+            ),
             Node("secret", "Pinned secret version\n+ private YAML config", 1, 2, "control"),
         ),
         (
@@ -102,11 +111,17 @@ DIAGRAMS = (
             Node("api", "Google Ads API\nGAQL families A to D", 0, 0, "source"),
             Node("raw", "pmax_raw\nlanded history", 1, 0, "data"),
             Node("staging", "Staging\nlatest row per key", 2, 0, "data"),
-            Node("intermediate", "Intermediate\ntyped history + provenance", 3, 0, "data"),
+            Node("intermediate", "Intermediate\ntyped history +\nprovenance", 3, 0, "data"),
             Node("marts", "Additive marts\nperformance + entities", 4, 0, "runtime"),
             Node("views", "Ratio views\nSUM over SUM", 5, 0, "output"),
             Node("reference", "Pinned pMaximizer\nreference queries", 2, 2, "source"),
-            Node("rules", "Explicit rules mapping\nno runtime dependency", 3, 2, "control"),
+            Node(
+                "rules",
+                "Explicit rules mapping\nnot a dependency of\nthe daily marts",
+                3,
+                2,
+                "control",
+            ),
             Node("scores", "Best-practice score marts\ncampaign + asset group", 4, 2, "runtime"),
         ),
         (
@@ -115,6 +130,7 @@ DIAGRAMS = (
             Edge("staging", "intermediate"),
             Edge("intermediate", "marts"),
             Edge("marts", "views"),
+            Edge("marts", "scores"),
             Edge("reference", "rules", True),
             Edge("rules", "scores", True),
         ),
@@ -158,21 +174,33 @@ DIAGRAMS = (
     Diagram(
         "daily-run",
         (
-            Node("scheduler", "Scheduler fires\n04:00 account timezone", 0, 0, "control"),
+            Node(
+                "scheduler",
+                "Scheduler fires\n04:00 configured\ndeployment timezone",
+                0,
+                0,
+                "control",
+            ),
             Node("lease", "Acquire lease\none writer continues", 1, 0, "control"),
             Node("extract", "Extract + load\nallowlisted accounts only", 2, 0, "source"),
-            Node("transform", "Checkpointed transforms\nre-pull eligible window", 3, 0, "data"),
-            Node("validate", "Validate + report\nPASS, FAIL, or SKIPPED", 4, 0, "runtime"),
-            Node("observe", "Append observation log\nbackup + alert outcome", 5, 0, "output"),
+            Node("observe", "Append observation log\n+ backup", 3, 0, "output"),
+            Node(
+                "transform",
+                "Checkpointed extraction\n+ window-bound transforms",
+                4,
+                0,
+                "data",
+            ),
+            Node("validate", "Validate + report\nPASS, FAIL, or SKIPPED", 5, 0, "runtime"),
             Node("digest", "Digest-pinned image\nnumeric secret version", 2, 2, "runtime"),
-            Node("first-run", "First run ladder\nScheduler stays paused", 4, 2, "control"),
+            Node("first-run", "First run ladder\nScheduler stays paused", 5, 2, "control"),
         ),
         (
             Edge("scheduler", "lease"),
             Edge("lease", "extract"),
-            Edge("extract", "transform"),
+            Edge("extract", "observe"),
+            Edge("observe", "transform"),
             Edge("transform", "validate"),
-            Edge("validate", "observe"),
             Edge("digest", "extract", True),
             Edge("validate", "first-run", True),
         ),
@@ -220,8 +248,12 @@ def _request(
 
 def _health(base_url: str) -> dict[str, Any]:
     health = _request(base_url, "GET", "/health")
+    if "websocket_clients" not in health:
+        raise CanvasError("canvas health response omitted websocket_clients")
     clients = health.get("websocket_clients")
-    if not isinstance(clients, int) or clients < 1:
+    if not isinstance(clients, int) or clients < 0:
+        raise CanvasError("canvas health websocket_clients must be a non-negative integer")
+    if clients == 0:
         raise CanvasError(
             "canvas has no attached browser client (health websocket_clients must be at least 1)"
         )
@@ -230,7 +262,7 @@ def _health(base_url: str) -> dict[str, Any]:
 
 def _label_width(label: str) -> int:
     longest_line = max(len(line) for line in label.splitlines())
-    return max(BOX_MIN_WIDTH, longest_line * 10 + 48)
+    return max(BOX_MIN_WIDTH, int(longest_line * 0.6 * 20 + 48))
 
 
 def _label_height(label: str) -> int:
@@ -316,6 +348,204 @@ def _qa_grid(diagram: Diagram, elements: list[dict[str, Any]]) -> None:
             raise CanvasError(f"{diagram.name}: edge refers to an unknown node")
 
 
+def _stable_int(element_id: str, salt: str) -> int:
+    value = zlib.crc32(f"{element_id}:{salt}".encode("utf-8")) & 0x7FFFFFFF
+    return value or 1
+
+
+def _index(position: int) -> str:
+    if position >= len(BASE62):
+        raise CanvasError("diagram has too many elements for the native index allocator")
+    return f"a{BASE62[position]}"
+
+
+def _native_defaults(
+    element: dict[str, Any],
+    position: int,
+    *,
+    bound_elements: list[dict[str, str]] | None,
+) -> dict[str, Any]:
+    element_id = str(element["id"])
+    return {
+        **element,
+        "angle": 0,
+        "opacity": 100,
+        "groupIds": [],
+        "frameId": None,
+        "index": _index(position),
+        "seed": _stable_int(element_id, "seed"),
+        "version": 1,
+        "versionNonce": _stable_int(element_id, "nonce"),
+        "isDeleted": False,
+        "boundElements": bound_elements,
+        "updated": 1,
+        "link": None,
+        "locked": False,
+    }
+
+
+def _native_scene_elements(scene_elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert canvas REST skeletons into loadable Excalidraw elements."""
+    boxes = [element for element in scene_elements if element.get("type") == "rectangle"]
+    arrows = [element for element in scene_elements if element.get("type") == "arrow"]
+    box_ids = {str(box.get("id")) for box in boxes}
+    text_ids = {str(box["id"]): f"{box['id']}-label" for box in boxes}
+
+    native: list[dict[str, Any]] = []
+    for box in boxes:
+        box_id = str(box["id"])
+        label = box.get("label", {}).get("text")
+        if not isinstance(label, str) or not label:
+            raise CanvasError(f"rectangle {box_id} has no label")
+        references: list[dict[str, str]] = [
+            {"id": text_ids[box_id], "type": "text"}
+        ]
+        for arrow in arrows:
+            start_id = arrow.get("start", {}).get("id")
+            end_id = arrow.get("end", {}).get("id")
+            if box_id in {start_id, end_id}:
+                references.append({"id": str(arrow["id"]), "type": "arrow"})
+        rectangle = {
+            "id": box_id,
+            "type": "rectangle",
+            "x": box["x"],
+            "y": box["y"],
+            "width": box["width"],
+            "height": box["height"],
+            "strokeColor": box.get("strokeColor", INK),
+            "backgroundColor": box.get("backgroundColor", "#ffffff"),
+            "fillStyle": box.get("fillStyle", "solid"),
+            "strokeWidth": box.get("strokeWidth", 2),
+            "strokeStyle": box.get("strokeStyle", "solid"),
+            "roughness": box.get("roughness", 1),
+            "roundness": box.get("roundness") or {"type": 3},
+        }
+        native.append(
+            _native_defaults(rectangle, len(native), bound_elements=references)
+        )
+
+    for box in boxes:
+        box_id = str(box["id"])
+        label = str(box["label"]["text"])
+        font_size = int(box.get("fontSize", 20))
+        lines = label.splitlines()
+        text_width = min(
+            float(box["width"]) - 20,
+            max(len(line) for line in lines) * 0.6 * font_size,
+        )
+        text_height = len(lines) * font_size * 1.25
+        text = {
+            "id": text_ids[box_id],
+            "type": "text",
+            "x": float(box["x"]) + (float(box["width"]) - text_width) / 2,
+            "y": float(box["y"]) + (float(box["height"]) - text_height) / 2,
+            "width": text_width,
+            "height": text_height,
+            "strokeColor": box.get("strokeColor", INK),
+            "backgroundColor": "transparent",
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 1,
+            "roundness": None,
+            "fontSize": font_size,
+            "fontFamily": 5,
+            "text": label,
+            "originalText": label,
+            "textAlign": "center",
+            "verticalAlign": "middle",
+            "containerId": box_id,
+            "lineHeight": 1.25,
+            "autoResize": True,
+        }
+        native.append(_native_defaults(text, len(native), bound_elements=None))
+
+    for arrow in arrows:
+        arrow_id = str(arrow["id"])
+        start_id = arrow.get("start", {}).get("id")
+        end_id = arrow.get("end", {}).get("id")
+        if start_id not in box_ids or end_id not in box_ids:
+            raise CanvasError(f"arrow {arrow_id} has an invalid endpoint")
+        points = arrow.get("points")
+        if not isinstance(points, list) or len(points) < 2:
+            raise CanvasError(f"arrow {arrow_id} has no valid points")
+        point_x = [float(point[0]) for point in points]
+        point_y = [float(point[1]) for point in points]
+        linear = {
+            "id": arrow_id,
+            "type": "arrow",
+            "x": arrow["x"],
+            "y": arrow["y"],
+            "width": max(point_x) - min(point_x),
+            "height": max(point_y) - min(point_y),
+            "strokeColor": arrow.get("strokeColor", ACCENT),
+            "backgroundColor": "transparent",
+            "fillStyle": "solid",
+            "strokeWidth": arrow.get("strokeWidth", 2),
+            "strokeStyle": arrow.get("strokeStyle", "solid"),
+            "roughness": arrow.get("roughness", 1),
+            "roundness": None,
+            "points": points,
+            "startBinding": {
+                "elementId": start_id,
+                "focus": 0,
+                "gap": 1,
+                "fixedPoint": None,
+            },
+            "endBinding": {
+                "elementId": end_id,
+                "focus": 0,
+                "gap": 1,
+                "fixedPoint": None,
+            },
+            "startArrowhead": None,
+            "endArrowhead": arrow.get("endArrowhead", "arrow"),
+            "lastCommittedPoint": None,
+            "elbowed": False,
+        }
+        native.append(_native_defaults(linear, len(native), bound_elements=None))
+    _assert_native_scene(native)
+    return native
+
+
+def _assert_native_scene(elements: list[dict[str, Any]]) -> None:
+    by_id = {element.get("id"): element for element in elements}
+    rectangles = [element for element in elements if element.get("type") == "rectangle"]
+    arrows = [element for element in elements if element.get("type") == "arrow"]
+    for rectangle in rectangles:
+        text_refs = [
+            ref
+            for ref in rectangle.get("boundElements") or []
+            if ref.get("type") == "text"
+        ]
+        if len(text_refs) != 1:
+            raise CanvasError(
+                f"native rectangle {rectangle.get('id')} must bind exactly one text element"
+            )
+        text = by_id.get(text_refs[0].get("id"))
+        if not text or text.get("type") != "text":
+            raise CanvasError(f"native rectangle {rectangle.get('id')} binds missing text")
+        if text.get("containerId") != rectangle.get("id"):
+            raise CanvasError(f"native text for {rectangle.get('id')} has wrong containerId")
+        if "label" in rectangle:
+            raise CanvasError(f"native rectangle {rectangle.get('id')} retained REST label")
+    for arrow in arrows:
+        if not arrow.get("startBinding") or not arrow.get("endBinding"):
+            raise CanvasError(f"native arrow {arrow.get('id')} lacks bindings")
+        if "start" in arrow or "end" in arrow:
+            raise CanvasError(f"native arrow {arrow.get('id')} retained REST endpoints")
+        for binding in (arrow["startBinding"], arrow["endBinding"]):
+            rectangle = by_id.get(binding.get("elementId"))
+            references = rectangle.get("boundElements") if rectangle else []
+            if not any(
+                ref.get("id") == arrow.get("id") and ref.get("type") == "arrow"
+                for ref in references or []
+            ):
+                raise CanvasError(
+                    f"native arrow {arrow.get('id')} is not bound back from its rectangle"
+                )
+
+
 def _extract_image(result: dict[str, Any], expected_format: str) -> str:
     if result.get("format") != expected_format or not isinstance(result.get("data"), str):
         raise CanvasError(f"export returned malformed {expected_format} data")
@@ -325,6 +555,25 @@ def _extract_image(result: dict[str, Any], expected_format: str) -> str:
 def _embedded_woff2(svg: str) -> bool:
     lowered = svg.lower()
     return "@font-face" in lowered and "data:font/woff2;base64," in lowered
+
+
+def _assert_white_svg_background(svg: str, diagram_name: str) -> None:
+    try:
+        root = ET.fromstring(svg)
+    except ET.ParseError as error:
+        raise CanvasError(f"{diagram_name}: SVG export is malformed") from error
+    first_rect = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "rect"
+        ),
+        None,
+    )
+    if first_rect is None or first_rect.get("fill", "").lower() != "#ffffff":
+        raise CanvasError(
+            f"{diagram_name}: SVG export does not begin with a #ffffff background rect"
+        )
 
 
 def _inject_subset(svg: str, labels: str) -> str:
@@ -380,12 +629,13 @@ def _write_diagram(
     if not isinstance(scene_elements, list):
         raise CanvasError(f"{diagram.name}: canvas returned no element list")
     _qa_grid(diagram, scene_elements)
+    native_elements = _native_scene_elements(scene_elements)
 
     envelope = {
         "type": "excalidraw",
         "version": 2,
         "source": "pmax-pack",
-        "elements": scene_elements,
+        "elements": native_elements,
         "appState": {"viewBackgroundColor": "#ffffff", "exportBackground": True},
         "files": {},
     }
@@ -404,6 +654,7 @@ def _write_diagram(
     svg = _extract_image(svg_result, "svg")
     if "<svg" not in svg:
         raise CanvasError(f"{diagram.name}: SVG export contains no svg root")
+    _assert_white_svg_background(svg, diagram.name)
     if not _embedded_woff2(svg):
         labels = "".join(node.label for node in diagram.nodes)
         svg = _inject_subset(svg, labels)
@@ -423,6 +674,7 @@ def _write_diagram(
     if not png.startswith(b"\x89PNG\r\n\x1a\n"):
         raise CanvasError(f"{diagram.name}: PNG export has the wrong signature")
     (output_dir / f"{diagram.name}.png").write_bytes(png)
+    # The QA duplicate stays private through scripts/publish-exclude.txt.
     (output_dir / "qa" / f"{diagram.name}.png").write_bytes(png)
     print(f"built {diagram.name}: excalidraw, svg, png, qa/png")
 
@@ -434,28 +686,36 @@ def build(base_url: str, output_dir: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="pmax-canvas-snapshot-") as temp_dir:
         snapshot_path = Path(temp_dir) / "canvas-elements.json"
         snapshot = _request(base_url, "GET", "/api/elements")
+        snapshot_elements = snapshot.get("elements")
+        if not isinstance(snapshot_elements, list):
+            raise CanvasError("canvas snapshot contains no element list")
         snapshot_path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
-        primary_error: BaseException | None = None
         try:
             for diagram in DIAGRAMS:
                 _write_diagram(base_url, output_dir, diagram)
-        except BaseException as error:
-            primary_error = error
-            raise
         finally:
             try:
                 saved = json.loads(snapshot_path.read_text(encoding="utf-8"))
+                saved_elements = saved.get("elements")
+                if not isinstance(saved_elements, list):
+                    raise CanvasError("saved canvas snapshot contains no element list")
+                _request(base_url, "DELETE", "/api/elements/clear")
                 _request(
                     base_url,
                     "POST",
                     "/api/elements/sync",
-                    {"elements": saved.get("elements", []), "timestamp": int(time.time() * 1000)},
+                    {"elements": saved_elements, "timestamp": int(time.time() * 1000)},
                 )
+                restored = _request(base_url, "GET", "/api/elements").get("elements")
+                if not isinstance(restored, list) or len(restored) != len(saved_elements):
+                    raise CanvasError(
+                        "canvas restore count mismatch: "
+                        f"expected {len(saved_elements)}, got "
+                        f"{len(restored) if isinstance(restored, list) else 'invalid'}"
+                    )
                 print(f"restored canvas snapshot from temporary file ({snapshot_path})")
             except BaseException as restore_error:
-                if primary_error is None:
-                    raise CanvasError(f"canvas restore failed: {restore_error}") from restore_error
-                print(f"ERROR: canvas restore also failed: {restore_error}", file=sys.stderr)
+                raise CanvasError(f"canvas restore failed: {restore_error}") from restore_error
 
 
 def main() -> int:

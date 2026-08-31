@@ -5,352 +5,880 @@
   },
   "elements": [
     {
+      "angle": 0,
       "backgroundColor": "#E7F5FF",
-      "createdAt": "2026-08-31T13:29:22.914Z",
+      "boundElements": [
+        {
+          "id": "ads-api-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-0-ads-api-cloud-run",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 84,
       "id": "ads-api",
-      "label": {
-        "text": "Google Ads API"
-      },
+      "index": "a0",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 393210492,
       "strokeColor": "#1971C2",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "width": 200,
+      "versionNonce": 44557014,
+      "width": 216,
       "x": 70,
       "y": 245
     },
     {
+      "angle": 0,
       "backgroundColor": "#D1FAE5",
-      "createdAt": "2026-08-31T13:29:22.914Z",
+      "boundElements": [
+        {
+          "id": "cloud-run-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-0-ads-api-cloud-run",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-1-cloud-run-raw",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-4-scheduler-cloud-run",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-5-secret-cloud-run",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "cloud-run",
-      "label": {
-        "text": "One Cloud Run Job\nimage pinned by digest"
-      },
+      "index": "a1",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 667346896,
       "strokeColor": "#047857",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "width": 268,
-      "x": 420,
+      "versionNonce": 1576510488,
+      "width": 312,
+      "x": 470,
       "y": 245
     },
     {
+      "angle": 0,
       "backgroundColor": "#F4F4F5",
-      "createdAt": "2026-08-31T13:29:22.914Z",
+      "boundElements": [
+        {
+          "id": "raw-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-1-cloud-run-raw",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-2-raw-marts",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "raw",
-      "label": {
-        "text": "BigQuery raw\nlanded GAQL families"
-      },
+      "index": "a2",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 1055109009,
       "strokeColor": "#52525B",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "width": 248,
-      "x": 770,
+      "versionNonce": 1547038806,
+      "width": 288,
+      "x": 870,
       "y": 245
     },
     {
+      "angle": 0,
       "backgroundColor": "#F4F4F5",
-      "createdAt": "2026-08-31T13:29:22.914Z",
+      "boundElements": [
+        {
+          "id": "marts-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-2-raw-marts",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-3-marts-report",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "marts",
-      "label": {
-        "text": "Staging + intermediates\nadditive marts + views"
-      },
+      "index": "a3",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 2034103254,
       "strokeColor": "#52525B",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "width": 278,
-      "x": 1120,
+      "versionNonce": 885717561,
+      "width": 324,
+      "x": 1270,
       "y": 245
     },
     {
+      "angle": 0,
       "backgroundColor": "#FEF3C7",
-      "createdAt": "2026-08-31T13:29:22.914Z",
+      "boundElements": [
+        {
+          "id": "report-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-3-marts-report",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "report",
-      "label": {
-        "text": "Validation report\nand observation backup"
-      },
+      "index": "a4",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 1719269056,
       "strokeColor": "#B45309",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "width": 268,
-      "x": 1470,
+      "versionNonce": 1073810285,
+      "width": 312,
+      "x": 1670,
       "y": 245
     },
     {
+      "angle": 0,
       "backgroundColor": "#F3E8FF",
-      "createdAt": "2026-08-31T13:29:22.914Z",
+      "boundElements": [
+        {
+          "id": "scheduler-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-4-scheduler-cloud-run",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "scheduler",
-      "label": {
-        "text": "Cloud Scheduler\n04:00 account timezone"
-      },
+      "index": "a5",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 253476244,
       "strokeColor": "#7E22CE",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "width": 268,
-      "x": 420,
+      "versionNonce": 745471179,
+      "width": 479,
+      "x": 470,
       "y": 70
     },
     {
+      "angle": 0,
       "backgroundColor": "#F3E8FF",
-      "createdAt": "2026-08-31T13:29:22.914Z",
+      "boundElements": [
+        {
+          "id": "secret-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-5-secret-cloud-run",
+          "type": "arrow"
+        }
+      ],
       "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
       "height": 88,
       "id": "secret",
-      "label": {
-        "text": "Pinned secret version\n+ private YAML config"
-      },
+      "index": "a6",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "roughness": 1,
       "roundness": {
         "type": 3
       },
+      "seed": 2004734222,
       "strokeColor": "#7E22CE",
+      "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "rectangle",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "width": 258,
-      "x": 420,
+      "versionNonce": 1020059901,
+      "width": 300,
+      "x": 470,
       "y": 420
     },
     {
-      "createdAt": "2026-08-31T13:29:22.914Z",
-      "end": {
-        "id": "cloud-run"
-      },
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "ads-api",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 25.0,
+      "id": "ads-api-label",
+      "index": "a7",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Google Ads API",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 70838871,
+      "strokeColor": "#1971C2",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Google Ads API",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 780684438,
+      "verticalAlign": "middle",
+      "width": 168.0,
+      "x": 94.0,
+      "y": 274.5
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "cloud-run",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "cloud-run-label",
+      "index": "a8",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "One Cloud Run Job\nimage pinned by digest",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 108940396,
+      "strokeColor": "#047857",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "One Cloud Run Job\nimage pinned by digest",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 520217364,
+      "verticalAlign": "middle",
+      "width": 264.0,
+      "x": 494.0,
+      "y": 264.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "raw",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "raw-label",
+      "index": "a9",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "BigQuery raw\nlanded GAQL families",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 786579934,
+      "strokeColor": "#52525B",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "BigQuery raw\nlanded GAQL families",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 977710521,
+      "verticalAlign": "middle",
+      "width": 240.0,
+      "x": 894.0,
+      "y": 264.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "marts",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "marts-label",
+      "index": "aA",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Staging + intermediates\nadditive marts + views",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1912736815,
+      "strokeColor": "#52525B",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Staging + intermediates\nadditive marts + views",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 1889570686,
+      "verticalAlign": "middle",
+      "width": 276.0,
+      "x": 1294.0,
+      "y": 264.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "report",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "report-label",
+      "index": "aB",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Validation report\nand observation backup",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1818315262,
+      "strokeColor": "#B45309",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Validation report\nand observation backup",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 23727737,
+      "verticalAlign": "middle",
+      "width": 264.0,
+      "x": 1694.0,
+      "y": 264.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "scheduler",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "scheduler-label",
+      "index": "aC",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Cloud Scheduler\n04:00 configured deployment timezone",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 41198944,
+      "strokeColor": "#7E22CE",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Cloud Scheduler\n04:00 configured deployment timezone",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 380872150,
+      "verticalAlign": "middle",
+      "width": 431.99999999999994,
+      "x": 493.5,
+      "y": 89.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "secret",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "secret-label",
+      "index": "aD",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Pinned secret version\n+ private YAML config",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 652516158,
+      "strokeColor": "#7E22CE",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Pinned secret version\n+ private YAML config",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 449071387,
+      "verticalAlign": "middle",
+      "width": 252.0,
+      "x": 494.0,
+      "y": 439.0
+    },
+    {
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "cloud-run",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 0.750000711769701,
       "id": "edge-0-ads-api-cloud-run",
+      "index": "aE",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          134.00021700947377,
-          0.6979177969244006
+          168.00015943639232,
+          0.750000711769701
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "ads-api"
+      "roundness": null,
+      "seed": 234044040,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "ads-api",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "x": 277.9998914952631,
-      "y": 287.56249943487114
+      "versionNonce": 946685955,
+      "width": 168.00015943639232,
+      "x": 293.99992028180384,
+      "y": 287.5178567869723
     },
     {
-      "createdAt": "2026-08-31T13:29:22.914Z",
-      "end": {
-        "id": "raw"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "raw",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 0.0,
       "id": "edge-1-cloud-run-raw",
+      "index": "aF",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          66,
+          72,
           0
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "cloud-run"
+      "roundness": null,
+      "seed": 1818595998,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "cloud-run",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "x": 696,
+      "versionNonce": 1289251834,
+      "width": 72.0,
+      "x": 790,
       "y": 289
     },
     {
-      "createdAt": "2026-08-31T13:29:22.914Z",
-      "end": {
-        "id": "marts"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "marts",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 0.0,
       "id": "edge-2-raw-marts",
+      "index": "aG",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          86,
+          96,
           0
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "raw"
+      "roundness": null,
+      "seed": 218329537,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "raw",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "x": 1026,
+      "versionNonce": 938295676,
+      "width": 96.0,
+      "x": 1166,
       "y": 289
     },
     {
-      "createdAt": "2026-08-31T13:29:22.914Z",
-      "end": {
-        "id": "report"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "report",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 0.0,
       "id": "edge-3-marts-report",
+      "index": "aH",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          56,
+          60,
           0
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "marts"
+      "roundness": null,
+      "seed": 1853634871,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "marts",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "x": 1406,
+      "versionNonce": 1666214173,
+      "width": 60.0,
+      "x": 1602,
       "y": 289
     },
     {
-      "createdAt": "2026-08-31T13:29:22.914Z",
-      "end": {
-        "id": "cloud-run"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "cloud-run",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 72.55957446864898,
       "id": "edge-4-scheduler-cloud-run",
+      "index": "aI",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          0,
-          71
+          -34.62128267504113,
+          72.55957446864898
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "scheduler"
+      "roundness": null,
+      "seed": 1959096902,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "scheduler",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "x": 554,
-      "y": 166
+      "versionNonce": 1145606652,
+      "width": 34.62128267504113,
+      "x": 685.0606413375206,
+      "y": 165.2202127656755
     },
     {
-      "createdAt": "2026-08-31T13:29:22.914Z",
-      "end": {
-        "id": "cloud-run"
-      },
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
       "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "cloud-run",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 71.0093957988006,
       "id": "edge-5-secret-cloud-run",
+      "index": "aJ",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
       "points": [
         [
           0,
           0
         ],
         [
-          2.0287579033322345,
-          -71.00652661662889
+          2.4346078559588022,
+          -71.0093957988006
         ]
       ],
       "roughness": 1,
-      "start": {
-        "id": "secret"
+      "roundness": null,
+      "seed": 514111793,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "secret",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
       },
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 2,
       "type": "arrow",
-      "updatedAt": "2026-08-31T13:29:22.914Z",
+      "updated": 1,
       "version": 1,
-      "x": 550.4856210483339,
-      "y": 412.00326330831444
+      "versionNonce": 180556968,
+      "width": 2.4346078559588022,
+      "x": 621.7826960720206,
+      "y": 412.0046978994003
     }
   ],
   "files": {},

@@ -76,8 +76,9 @@ observation date. A future target is absent, not labelled `gap exceeded` or
 pending. Within that bound each label is final: exact-day observations are
 measured, a prior non-seed observation can be carried for at most five days,
 and every other gap is unavailable. The daily driver rebuilds every eligible
-click day in one atomic statement per table across the shared re-pull window,
-so new cells appear as the selected observation bound advances. That window is
+click day in one transaction per table across the shared re-pull window; a
+manifest step can update more than one table in one transaction. New cells
+appear as the selected observation bound advances. That window is
 the longest click-through lookback found in the resolved accounts' latest
 complete family D snapshots plus the restatement margin. Before every account
 has such a snapshot, the driver records `config_fallback` and uses the largest

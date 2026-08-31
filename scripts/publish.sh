@@ -135,11 +135,23 @@ if [[ "$MODE" == "skeleton" ]]; then
   fi
 else
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/pmax-pack-release.XXXXXX")"
-  git clone --branch main "$TARGET" "$WORK"
+  BRANCH="release/${VERSION}"
+  # A second publish of the same version lands as a further commit on the
+  # existing release branch (fast-forward), so an open PR simply re-runs CI.
+  if git ls-remote --exit-code --heads "$TARGET" "$BRANCH" >/dev/null 2>&1; then
+    git clone --branch "$BRANCH" "$TARGET" "$WORK"
+  else
+    git clone --branch main "$TARGET" "$WORK"
+    git -C "$WORK" checkout -b "$BRANCH"
+  fi
   rsync -a --delete --exclude .git "$EXPORT/" "$WORK/"
-  git -C "$WORK" checkout -b "release/${VERSION}"
   git -C "$WORK" add -A
-  git_ident "$WORK" commit -q -m "pmax-pack ${MODE} ${VERSION}"
-  git -C "$WORK" push -u "$TARGET" "release/${VERSION}"
-  echo "gh pr create --base main --head release/${VERSION} --title \"Release ${VERSION}\" --body \"Release ${VERSION}\""
+  if git -C "$WORK" diff --cached --quiet; then
+    echo "publish: export identical to $BRANCH head; nothing to commit" >&2
+  else
+    git_ident "$WORK" commit -q -m "pmax-pack ${MODE} ${VERSION}"
+  fi
+  git -C "$WORK" push -u "$TARGET" "$BRANCH"
+  echo "published $BRANCH at $(git -C "$WORK" rev-parse HEAD)"
+  echo "gh pr create --base main --head ${BRANCH} --title \"Release ${VERSION}\" --body \"Release ${VERSION}\""
 fi
