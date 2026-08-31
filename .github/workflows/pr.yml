@@ -54,21 +54,7 @@ jobs:
         run: uv run python scripts/lint_dataset_refs.py
 
       - name: Render SQL templates and parse with sqlglot
-        run: |
-          if [ ! -d src/pmax_pack/sql ]; then
-            echo "src/pmax_pack/sql absent; render is a no-op"
-            exit 0
-          fi
-          uv run python - <<'PY'
-          import pathlib
-          import sqlglot
-
-          root = pathlib.Path("src/pmax_pack/sql")
-          for path in sorted(root.rglob("*.sql")):
-              text = path.read_text(encoding="utf-8")
-              sqlglot.parse(text, dialect="bigquery")
-              print(f"parsed {path}")
-          PY
+        run: uv run python scripts/parse_sql_templates.py
 
       - name: Shape-only secret scrub
         run: uv run python scripts/scrub_check.py .
