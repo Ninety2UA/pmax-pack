@@ -82,7 +82,7 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1730763738,
-      "width": 288,
+      "width": 300,
       "x": 470,
       "y": 70
     },
@@ -258,7 +258,7 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 634750773,
-      "width": 312,
+      "width": 252,
       "x": 2070,
       "y": 70
     },
@@ -396,21 +396,21 @@
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "Acquire lease\none writer continues",
+      "originalText": "Acquire lease\nSKIPPED or one writer",
       "roughness": 1,
       "roundness": null,
       "seed": 1385410350,
       "strokeColor": "#7E22CE",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "Acquire lease\none writer continues",
+      "text": "Acquire lease\nSKIPPED or one writer",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 117911115,
       "verticalAlign": "middle",
-      "width": 240.0,
+      "width": 252.0,
       "x": 494.0,
       "y": 89.0
     },
@@ -544,21 +544,21 @@
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "Validate + report\nPASS, FAIL, or SKIPPED",
+      "originalText": "Validate + report\nPASS or FAIL",
       "roughness": 1,
       "roundness": null,
       "seed": 1367852665,
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "Validate + report\nPASS, FAIL, or SKIPPED",
+      "text": "Validate + report\nPASS or FAIL",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 1921777269,
       "verticalAlign": "middle",
-      "width": 264.0,
+      "width": 204.0,
       "x": 2094.0,
       "y": 89.0
     },
@@ -651,7 +651,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 3.7244656555290447,
+      "height": 3.670216534636836,
       "id": "edge-0-scheduler-lease",
       "index": "aG",
       "isDeleted": false,
@@ -665,8 +665,8 @@
           0
         ],
         [
-          108.00950401034265,
-          -3.7244656555290447
+          108.00922944788408,
+          -3.670216534636836
         ]
       ],
       "roughness": 1,
@@ -686,9 +686,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 277339656,
-      "width": 108.00950401034265,
-      "x": 353.9952479948287,
-      "y": 122.9656811036266
+      "width": 108.00922944788408,
+      "x": 353.99538527605796,
+      "y": 123.03899176246405
     },
     {
       "angle": 0,
@@ -719,7 +719,7 @@
           0
         ],
         [
-          96,
+          84,
           1.4210854715202004e-14
         ]
       ],
@@ -740,8 +740,8 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1763126513,
-      "width": 96.0,
-      "x": 766,
+      "width": 84.0,
+      "x": 778,
       "y": 114
     },
     {
@@ -975,7 +975,7 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 246.0,
+      "height": 246.05845361533196,
       "id": "edge-6-validate-first-run",
       "index": "aM",
       "isDeleted": false,
@@ -989,8 +989,8 @@
           0
         ],
         [
-          0,
-          246
+          21.090724595599568,
+          246.05845361533196
         ]
       ],
       "roughness": 1,
@@ -1010,9 +1010,9 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 128837316,
-      "width": 0.0,
-      "x": 2226,
-      "y": 166
+      "width": 21.090724595599568,
+      "x": 2200.4546377022,
+      "y": 165.970773192334
     }
   ],
   "files": {},

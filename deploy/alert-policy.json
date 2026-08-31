@@ -1,7 +1,7 @@
 {
   "displayName": "pMax pack failed job",
   "documentation": {
-    "content": "Cloud Run Job pmax-pack-daily completed with result=failed. Check the execution logs and RUNBOOK.md before retrying.",
+    "content": "Cloud Run Job pmax-pack-daily completed with result=failed. Check the execution logs and docs/operations.md before retrying.",
     "mimeType": "text/markdown"
   },
   "combiner": "OR",

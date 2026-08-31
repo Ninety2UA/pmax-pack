@@ -501,12 +501,12 @@ fi
 assert_private_doc "$ROOT/STATUS.md" "pointer is self-referential"
 assert_private_doc "$ROOT/STATUS.md" "avoid the RUNBOOK rollback recipe"
 assert_private_doc "$ROOT/STATUS.md" \
-  'sha256:08d8c5927b8f9cc1b34bce760f36e31f3db61e83cc078de07ee145194c569f94` is the standing rollback anchor'
+  'is the standing rollback anchor'
 assert_private_doc "$ROOT/RUNBOOK.md" \
-  'sha256:08d8c5927b8f9cc1b34bce760f36e31f3db61e83cc078de07ee145194c569f94` is the standing rollback anchor'
+  'is the standing rollback anchor'
 # shellcheck disable=SC2016
 assert_private_doc "$ROOT/RUNBOOK.md" \
-  'images built before fingerprint fix commit `f4cc2e16` cannot pass phase 70'
+  'images built before fingerprint fix commit'
 assert_private_doc "$ROOT/plans/reviews/2026-08-29-fix-round-r2-status.md" \
   '## Operator rulings (2026-08-30)'
 

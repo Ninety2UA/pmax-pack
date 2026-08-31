@@ -188,8 +188,8 @@ rebuilds, and backfills leave it alone.
 The observation log is append-only and backed up separately from report
 retention. Alerting watches failed Cloud Run executions. Operators should
 inspect the report's stale cells, null-cost cells, frozen chunks, and parity
-staleness before treating a run as healthy. Phase 70 checks checkpoint drain
-directly in the ledger; it is not a report section. See
+staleness before treating a run as healthy. On a first deployment, phase 70
+drains extraction checkpoints. On an upgrade, it rebuilds the live marts. See
 [docs/operations.md](docs/operations.md) for upgrades, rollback, rotation, and
 restore behavior.
 

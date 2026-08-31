@@ -2,9 +2,10 @@
 
 The pack runs as one private, digest-pinned Cloud Run Job in
 `europe-west1`. A paused-first Cloud Scheduler trigger starts the daily run in
-the configured account timezone. Configuration comes from a private GCS YAML
-object. Google Ads credentials come from one pinned Secret Manager version
-mounted as a file. No credential is baked into the image.
+the configured deployment timezone (`timezone_override`). Configuration comes
+from a private GCS YAML object. Google Ads credentials come from one pinned
+Secret Manager version mounted as a file. No credential is baked into the
+image.
 
 That secret holds the shared MCC token from the operator's existing Google Ads
 credential file and own Google login. The credential's top-manager

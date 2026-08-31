@@ -181,7 +181,7 @@ DIAGRAMS = (
                 0,
                 "control",
             ),
-            Node("lease", "Acquire lease\none writer continues", 1, 0, "control"),
+            Node("lease", "Acquire lease\nSKIPPED or one writer", 1, 0, "control"),
             Node("extract", "Extract + load\nallowlisted accounts only", 2, 0, "source"),
             Node("observe", "Append observation log\n+ backup", 3, 0, "output"),
             Node(
@@ -191,7 +191,7 @@ DIAGRAMS = (
                 0,
                 "data",
             ),
-            Node("validate", "Validate + report\nPASS, FAIL, or SKIPPED", 5, 0, "runtime"),
+            Node("validate", "Validate + report\nPASS or FAIL", 5, 0, "runtime"),
             Node("digest", "Digest-pinned image\nnumeric secret version", 2, 2, "runtime"),
             Node("first-run", "First run ladder\nScheduler stays paused", 5, 2, "control"),
         ),

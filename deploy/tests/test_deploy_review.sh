@@ -362,6 +362,7 @@ JSON
     "$correct_review" "$current_image" "$TMP/review-tty.out" <<'PY'
 from __future__ import annotations
 
+import errno
 import os
 import pty
 import select
@@ -392,6 +393,18 @@ prompt = b"review written? enter the path to the signed YAML, or empty to abort"
 captured = bytearray()
 
 
+def read_master() -> bytes:
+    # Linux raises EIO on the PTY master once the child has closed the slave;
+    # macOS returns an empty read. Both mean end of output for this driver.
+    try:
+        return os.read(master, 4096)
+    except OSError as exc:
+        if exc.errno == errno.EIO:
+            return b""
+        raise
+
+
+
 def wait_for_prompt(count: int) -> None:
     deadline = time.monotonic() + 10
     while bytes(captured).count(prompt) < count:
@@ -399,7 +412,7 @@ def wait_for_prompt(count: int) -> None:
             raise SystemExit(f"timed out waiting for review prompt {count}")
         ready, _, _ = select.select([master], [], [], 0.25)
         if ready:
-            captured.extend(os.read(master, 4096))
+            captured.extend(read_master())
 
 
 wait_for_prompt(1)
@@ -424,13 +437,13 @@ os.write(master, (correct_path + "\n").encode())
 while process.poll() is None:
     ready, _, _ = select.select([master], [], [], 0.25)
     if ready:
-        captured.extend(os.read(master, 4096))
+        captured.extend(read_master())
 for _ in range(4):
     ready, _, _ = select.select([master], [], [], 0.05)
     if not ready:
         break
     try:
-        captured.extend(os.read(master, 4096))
+        captured.extend(read_master())
     except OSError:
         break
 os.close(master)
@@ -460,6 +473,7 @@ PY
     "$TMP/review-tty-exhausted.out" <<'PY'
 from __future__ import annotations
 
+import errno
 import os
 import pty
 import select
@@ -488,6 +502,18 @@ os.close(slave)
 prompt = b"review written? enter the path to the signed YAML, or empty to abort"
 captured = bytearray()
 
+
+def read_master() -> bytes:
+    # Linux raises EIO on the PTY master once the child has closed the slave;
+    # macOS returns an empty read. Both mean end of output for this driver.
+    try:
+        return os.read(master, 4096)
+    except OSError as exc:
+        if exc.errno == errno.EIO:
+            return b""
+        raise
+
+
 for count in (1, 2):
     deadline = time.monotonic() + 10
     while bytes(captured).count(prompt) < count:
@@ -495,7 +521,7 @@ for count in (1, 2):
             raise SystemExit(f"timed out waiting for exhausted prompt {count}")
         ready, _, _ = select.select([master], [], [], 0.25)
         if ready:
-            captured.extend(os.read(master, 4096))
+            captured.extend(read_master())
     os.write(master, (wrong_path + "\n").encode())
 
 deadline = time.monotonic() + 10
@@ -505,13 +531,13 @@ while process.poll() is None:
         raise SystemExit("phase 85 did not stop after three attempts")
     ready, _, _ = select.select([master], [], [], 0.25)
     if ready:
-        captured.extend(os.read(master, 4096))
+        captured.extend(read_master())
 for _ in range(4):
     ready, _, _ = select.select([master], [], [], 0.05)
     if not ready:
         break
     try:
-        captured.extend(os.read(master, 4096))
+        captured.extend(read_master())
     except OSError:
         break
 os.close(master)
