@@ -42,8 +42,8 @@ PALETTE = {
     "output": ("#FEF3C7", "#B45309"),
     "control": ("#F3E8FF", "#7E22CE"),
 }
-GRID_X = 400
-GRID_Y = 175
+GRID_X = 340
+GRID_Y = 190
 ORIGIN_X = 70
 ORIGIN_Y = 70
 BOX_MIN_WIDTH = 200
@@ -83,19 +83,13 @@ DIAGRAMS = (
     Diagram(
         "architecture",
         (
+            Node("scheduler", "Cloud Scheduler\n04:00 deployment\ntimezone", 1, 0, "control"),
             Node("ads-api", "Google Ads API", 0, 1, "source"),
-            Node("cloud-run", "One Cloud Run Job\nimage pinned by digest", 1, 1, "runtime"),
-            Node("raw", "BigQuery raw\nlanded GAQL families", 2, 1, "data"),
-            Node("marts", "Staging + intermediates\nadditive marts + views", 3, 1, "data"),
-            Node("report", "Validation report\nand observation backup", 4, 1, "output"),
-            Node(
-                "scheduler",
-                "Cloud Scheduler\n04:00 configured deployment timezone",
-                1,
-                0,
-                "control",
-            ),
-            Node("secret", "Pinned secret version\n+ private YAML config", 1, 2, "control"),
+            Node("cloud-run", "One Cloud Run Job\nimage pinned\nby digest", 1, 1, "runtime"),
+            Node("raw", "BigQuery raw\nlanded GAQL\nfamilies", 2, 1, "data"),
+            Node("secret", "Pinned secret\nversion + private\nYAML config", 1, 2, "control"),
+            Node("marts", "Staging +\nintermediates\nadditive marts\n+ views", 2, 2, "data"),
+            Node("report", "Validation report\n+ observation\nbackup", 2, 3, "output"),
         ),
         (
             Edge("ads-api", "cloud-run"),
@@ -109,21 +103,27 @@ DIAGRAMS = (
     Diagram(
         "data-model",
         (
-            Node("api", "Google Ads API\nGAQL families A to D", 0, 0, "source"),
+            Node("api", "Google Ads API\nGAQL families\nA to D", 0, 0, "source"),
             Node("raw", "pmax_raw\nlanded history", 1, 0, "data"),
             Node("staging", "Staging\nlatest row per key", 2, 0, "data"),
-            Node("intermediate", "Intermediate\ntyped history +\nprovenance", 3, 0, "data"),
-            Node("marts", "Additive marts\nperformance + entities", 4, 0, "runtime"),
-            Node("views", "Ratio views\nSUM over SUM", 5, 0, "output"),
-            Node("reference", "Pinned pMaximizer\nreference queries", 2, 2, "source"),
+            Node("intermediate", "Intermediate\ntyped history +\nprovenance", 2, 1, "data"),
+            Node("marts", "Additive marts\nperformance +\nentities", 1, 1, "runtime"),
+            Node("views", "Ratio views\nSUM over SUM", 0, 1, "output"),
+            Node("reference", "Pinned pMaximizer\nreference queries", 0, 2, "source"),
             Node(
                 "rules",
-                "Explicit rules mapping\nnot a dependency of\nthe daily marts",
-                3,
+                "Explicit rules\nmapping, not a\ndependency of\nthe daily marts",
+                1,
                 2,
                 "control",
             ),
-            Node("scores", "Best-practice score marts\ncampaign + asset group", 4, 2, "runtime"),
+            Node(
+                "scores",
+                "Best-practice\nscore marts\ncampaign +\nasset group",
+                2,
+                2,
+                "runtime",
+            ),
         ),
         (
             Edge("api", "raw"),
@@ -139,27 +139,27 @@ DIAGRAMS = (
     Diagram(
         "cohort-mechanism",
         (
-            Node("lag", "Conversion-lag buckets\ncampaign + asset group", 0, 0, "source"),
-            Node("prefix", "Bucket reading\nprefix through day D", 1, 0, "data"),
-            Node("bucket-cells", "Measured cohort cells\nby lag boundary", 2, 0, "runtime"),
+            Node("lag", "Conversion-lag\nbuckets, campaign\n+ asset group", 0, 0, "source"),
+            Node("prefix", "Bucket reading\nprefix through\nday D", 1, 0, "data"),
+            Node("bucket-cells", "Measured cohort\ncells by lag\nboundary", 2, 0, "runtime"),
+            Node("ratios", "Cohort CPA + ROAS\nratio views", 1, 1, "output"),
+            Node("cohort-marts", "Additive cohort\nmarts, fixed\nclick-day cost", 2, 1, "runtime"),
             Node(
-                "observations",
-                "Append-only observations\nasset cumulative values",
-                0,
-                2,
-                "source",
+                "contract",
+                "Window, provenance\nmaturity,\nobserved-through",
+                3,
+                1,
+                "control",
             ),
+            Node("observations", "Append-only\nobservations\ncumulative values", 0, 2, "source"),
             Node("snapshot", "Snapshot reading\nvalue seen on\nclick date + D", 1, 2, "data"),
             Node(
                 "asset-cells",
-                "Measured or carried\ncohort cells\nmaximum five-day carry",
+                "Measured or carried\ncells, max five-day\ncarry",
                 2,
                 2,
                 "runtime",
             ),
-            Node("contract", "Window + provenance\nmaturity +\nobserved-through", 3, 1, "control"),
-            Node("cohort-marts", "Additive cohort marts\nfixed click-day cost", 4, 1, "runtime"),
-            Node("ratios", "Cohort CPA + ROAS\nratio views", 5, 1, "output"),
         ),
         (
             Edge("lag", "prefix"),
@@ -175,26 +175,20 @@ DIAGRAMS = (
     Diagram(
         "daily-run",
         (
-            Node(
-                "scheduler",
-                "Scheduler fires\n04:00 configured\ndeployment timezone",
-                0,
-                0,
-                "control",
-            ),
-            Node("lease", "Acquire lease\nSKIPPED or one writer", 1, 0, "control"),
-            Node("extract", "Extract + load\nallowlisted accounts only", 2, 0, "source"),
-            Node("observe", "Append observation log\n+ backup", 3, 0, "output"),
+            Node("scheduler", "Scheduler fires\n04:00 deployment\ntimezone", 0, 0, "control"),
+            Node("lease", "Acquire lease\nSKIPPED or\none writer", 1, 0, "control"),
+            Node("extract", "Extract + load\nallowlisted\naccounts only", 2, 0, "source"),
             Node(
                 "transform",
-                "Checkpointed extraction\n+ window-bound transforms",
-                4,
+                "Checkpointed\nextraction +\nwindow-bound\ntransforms",
                 0,
+                1,
                 "data",
             ),
-            Node("validate", "Validate + report\nPASS or FAIL", 5, 0, "runtime"),
-            Node("digest", "Digest-pinned image\nnumeric secret version", 2, 2, "runtime"),
-            Node("first-run", "First run ladder\nScheduler stays paused", 5, 2, "control"),
+            Node("observe", "Append observation\nlog + backup", 1, 1, "output"),
+            Node("digest", "Digest-pinned image\nnumeric secret\nversion", 2, 1, "runtime"),
+            Node("validate", "Validate + report\nPASS or FAIL", 0, 2, "runtime"),
+            Node("first-run", "First run ladder\nScheduler stays\npaused", 1, 2, "control"),
         ),
         (
             Edge("scheduler", "lease"),

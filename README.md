@@ -4,8 +4,8 @@
 operator-owned BigQuery layer for best-practice scores, asset analysis, and
 cohort CPA and ROAS.
 
-The pack is for teams that need to inspect how Performance Max works, not just
-read a dashboard. It extracts an exact account allowlist with gaarf, keeps the
+The pack is for teams that need to inspect how Performance Max works beneath
+the dashboards. It extracts an exact account allowlist with gaarf, keeps the
 landed history, builds additive marts, publishes safe ratio views, and leaves a
 validation report after every run.
 
@@ -212,8 +212,8 @@ contain generated IDs and values.
 
 The operator sets the per-user daily BigQuery query cap in phase 45 from a
 measured `PMAX_CI_DAILY_QUERY_QUOTA_MIB` value. The reference deployment used
-**50 GiB**. Measurements from that one-account deployment on 2026-08-31 were
-about **40 minutes** for a daily run and about **7 minutes** for a verification
+50 GiB. Measurements from that one-account deployment on 2026-08-31 were
+about 40 minutes for a daily run and about 7 minutes for a verification
 rebuild. These are not product constants: account history, action windows,
 entity volume, and BigQuery minimum billing can move both time and bytes.
 
