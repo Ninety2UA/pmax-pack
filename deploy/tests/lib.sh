@@ -20,6 +20,17 @@ assert_contains() {
   grep -Fq -- "$needle" "$path" || fail "$path missing: $needle"
 }
 
+# Private docs (RUNBOOK.md) are excluded from the public export, so their
+# parity checks run only where the file exists; the fixture-only PR job in
+# the public repository skips them instead of failing.
+assert_private_doc() {
+  if [[ ! -f "$1" ]]; then
+    echo "SKIP: $1 absent (private file not part of this export)"
+    return 0
+  fi
+  assert_contains "$@"
+}
+
 run_phase() {
   local phase_path="$1"
   local die_mode="${2:-plain}"

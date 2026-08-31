@@ -444,68 +444,70 @@ if grep -Fq 'gcloud run jobs execute' "$PHASES/80-parity.sh"; then
 fi
 assert_contains "$PHASES/65-config.sh" "sm_resource: \$SECRET_NAME"
 assert_contains "$PHASES/65-config.sh" "sm_version: \$SECRET_VERSION"
-assert_contains "$ROOT/RUNBOOK.md" 'previous-image.txt'
-assert_contains "$ROOT/RUNBOOK.md" "No \`docker build\`, \`gcloud builds submit\`"
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" 'previous-image.txt'
+assert_private_doc "$ROOT/RUNBOOK.md" "No \`docker build\`, \`gcloud builds submit\`"
+assert_private_doc "$ROOT/RUNBOOK.md" \
   "| pMax Performance Pack | Secret Manager pinned version"
-assert_contains "$ROOT/RUNBOOK.md" "The pack rotates with the shared MCC token"
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" "The pack rotates with the shared MCC token"
+assert_private_doc "$ROOT/RUNBOOK.md" \
   "including the pack's Secret Manager"
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   "then verifies its SUCCESS ledger row and its image digest externally"
 # shellcheck disable=SC2016
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   'For phase 80, run the `LOCAL` command printed by the live phase'
 # shellcheck disable=SC2016
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   '`sha256:PLAN_DIGEST` placeholder'
 # shellcheck disable=SC2016
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   '`image_digest mismatch` refusal'
 assert_contains "$ROOT/deploy/review-template.yaml" 'run_id: "<phase-70-run-id>"'
 assert_contains "$ROOT/deploy/review-template.yaml" 'decision: GO'
-assert_contains "$ROOT/RUNBOOK.md" 'signed-review-validation-<digest>.json'
-assert_contains "$ROOT/RUNBOOK.md" 'reviewed_at predates phase 70'
-assert_contains "$ROOT/RUNBOOK.md" 'single-invocation pause'
-assert_contains "$ROOT/RUNBOOK.md" 'written operator authorization'
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" 'signed-review-validation-<digest>.json'
+assert_private_doc "$ROOT/RUNBOOK.md" 'reviewed_at predates phase 70'
+assert_private_doc "$ROOT/RUNBOOK.md" 'single-invocation pause'
+assert_private_doc "$ROOT/RUNBOOK.md" 'written operator authorization'
+assert_private_doc "$ROOT/RUNBOOK.md" \
   'agents and automation may never create or supply it'
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   "operator's sign-off for the exact evidence"
-assert_contains "$ROOT/RUNBOOK.md" 'PMAX_IMAGE_REF=<printed-recorded-image-digest>'
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" 'PMAX_IMAGE_REF=<printed-recorded-image-digest>'
+assert_private_doc "$ROOT/RUNBOOK.md" \
   'First invocation: leave PMAX_PARITY_LOCAL_CONFIRMED and PMAX_SIGNED_REVIEW unset'
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   'Re-run with both PMAX_PARITY_LOCAL_CONFIRMED and PMAX_SIGNED_REVIEW set'
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   'exactly one SUCCESS and one SKIPPED across the two current drill executions, regardless of which won'
-assert_contains "$ROOT/RUNBOOK.md" "PMAX_MIGRATION_REVIEWED=1 \\"
-assert_contains "$ROOT/RUNBOOK.md" "PMAX_PARITY_LOCAL_CONFIRMED=1 \\"
-assert_contains "$ROOT/RUNBOOK.md" "PMAX_SIGNED_REVIEW=\"\$SIGNED_REVIEW\" \\"
-assert_contains "$ROOT/RUNBOOK.md" "PMAX_ALERT_CONFIRMED=1 \\"
-assert_contains "$ROOT/RUNBOOK.md" "PMAX_SKIPPED_ALERT_SILENT=1 \\"
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" "PMAX_MIGRATION_REVIEWED=1 \\"
+assert_private_doc "$ROOT/RUNBOOK.md" "PMAX_PARITY_LOCAL_CONFIRMED=1 \\"
+assert_private_doc "$ROOT/RUNBOOK.md" "PMAX_SIGNED_REVIEW=\"\$SIGNED_REVIEW\" \\"
+assert_private_doc "$ROOT/RUNBOOK.md" "PMAX_ALERT_CONFIRMED=1 \\"
+assert_private_doc "$ROOT/RUNBOOK.md" "PMAX_SKIPPED_ALERT_SILENT=1 \\"
+assert_private_doc "$ROOT/RUNBOOK.md" \
   'same no-build ladder as a phase-85 retry'
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   'phase may never appear in the confirmation list'
 assert_contains "$ROOT/docs/operations.md" "shared MCC token"
 assert_contains "$ROOT/docs/operations.md" "sets \`PMAX_IMAGE_REF\` to the prior digest"
 assert_contains "$ROOT/deploy/iam.md" "shared MCC token"
 assert_contains "$PHASES/75-lease-drill.sh" \
   'exactly one SUCCESS and one SKIPPED across the two drill executions, regardless of which won.'
-if ! grep -Eq '^\| RUNBOOK\.md \|.*\| 2026-08-29 \|$' "$ROOT/INDEX.md"; then
+if [[ ! -f "$ROOT/INDEX.md" ]]; then
+  echo "SKIP: $ROOT/INDEX.md absent (private file not part of this export)"
+elif ! grep -Eq '^\| RUNBOOK\.md \|.*\| 2026-08-29 \|$' "$ROOT/INDEX.md"; then
   fail "INDEX.md does not date the RUNBOOK row to 2026-08-29"
 fi
-assert_contains "$ROOT/STATUS.md" "pointer is self-referential"
-assert_contains "$ROOT/STATUS.md" "avoid the RUNBOOK rollback recipe"
-assert_contains "$ROOT/STATUS.md" \
+assert_private_doc "$ROOT/STATUS.md" "pointer is self-referential"
+assert_private_doc "$ROOT/STATUS.md" "avoid the RUNBOOK rollback recipe"
+assert_private_doc "$ROOT/STATUS.md" \
   'sha256:08d8c5927b8f9cc1b34bce760f36e31f3db61e83cc078de07ee145194c569f94` is the standing rollback anchor'
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   'sha256:08d8c5927b8f9cc1b34bce760f36e31f3db61e83cc078de07ee145194c569f94` is the standing rollback anchor'
 # shellcheck disable=SC2016
-assert_contains "$ROOT/RUNBOOK.md" \
+assert_private_doc "$ROOT/RUNBOOK.md" \
   'images built before fingerprint fix commit `f4cc2e16` cannot pass phase 70'
-assert_contains "$ROOT/plans/reviews/2026-08-29-fix-round-r2-status.md" \
+assert_private_doc "$ROOT/plans/reviews/2026-08-29-fix-round-r2-status.md" \
   '## Operator rulings (2026-08-30)'
 
 run_build_case() {
