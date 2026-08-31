@@ -392,17 +392,9 @@ os.close(slave)
 prompt = b"review written? enter the path to the signed YAML, or empty to abort"
 captured = bytearray()
 
-
-def read_master() -> bytes:
-    # Linux raises EIO on the PTY master once the child has closed the slave;
-    # macOS returns an empty read. Both mean end of output for this driver.
-    try:
-        return os.read(master, 4096)
-    except OSError as exc:
-        if exc.errno == errno.EIO:
-            return b""
-        raise
-
+# read_master() comes from the shared helper next to this test file.
+_helper = Path(phase).resolve().parent.parent / "tests" / "pty_read_master.py"
+exec(compile(_helper.read_text(encoding="utf-8"), str(_helper), "exec"))
 
 
 def wait_for_prompt(count: int) -> None:
@@ -502,16 +494,9 @@ os.close(slave)
 prompt = b"review written? enter the path to the signed YAML, or empty to abort"
 captured = bytearray()
 
-
-def read_master() -> bytes:
-    # Linux raises EIO on the PTY master once the child has closed the slave;
-    # macOS returns an empty read. Both mean end of output for this driver.
-    try:
-        return os.read(master, 4096)
-    except OSError as exc:
-        if exc.errno == errno.EIO:
-            return b""
-        raise
+# read_master() comes from the shared helper next to this test file.
+_helper = Path(phase).resolve().parent.parent / "tests" / "pty_read_master.py"
+exec(compile(_helper.read_text(encoding="utf-8"), str(_helper), "exec"))
 
 
 for count in (1, 2):

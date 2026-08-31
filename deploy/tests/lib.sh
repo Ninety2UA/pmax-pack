@@ -19,11 +19,19 @@ assert_contains() {
   grep -Fq -- "$needle" "$path" || fail "$path missing: $needle"
 }
 
-# Private docs (RUNBOOK.md) are excluded from the public export, so their
-# parity checks run only where the file exists; the fixture-only PR job in
-# the public repository skips them instead of failing.
+# Private docs (RUNBOOK.md, STATUS.md, INDEX.md, plans/) are excluded from
+# the public export. deployments/ is also excluded and always present in the
+# private tree, so it discriminates the two: in the public export a missing
+# private doc is an expected SKIP; in the private tree it is a hard failure.
+private_tree() {
+  [[ -d "$ROOT/deployments" ]]
+}
+
 assert_private_doc() {
   if [[ ! -f "$1" ]]; then
+    if private_tree; then
+      fail "$1 is missing from the private tree"
+    fi
     echo "SKIP: $1 absent (private file not part of this export)"
     return 0
   fi
