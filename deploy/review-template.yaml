@@ -1,0 +1,9 @@
+# At the phase-85 pause, copy this file and replace the seven printed values.
+# Enter its path only after completing the go/no-go list.
+run_id: "<phase-70-run-id>"
+image_digest: "<digest-pinned-image-reference>"
+report_uri: "gs://<report-bucket>/reports/<deployment>/<run-id>.md"
+parity_run_id: "parity-<account>-<YYYY-MM-DD>"
+reviewer: "<preflight-operator-identity>"
+reviewed_at: "<YYYY-MM-DDTHH:MM:SSZ>"
+decision: GO

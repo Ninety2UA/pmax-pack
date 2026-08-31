@@ -508,24 +508,32 @@ class Ledger:
         return self._query(sql, lookback_start=lookback_start)
 
     def first_snapshot_date(self, account_id: str | int) -> date | None:
-        """Return first_snapshot_date; earliest-per-key BY DESIGN (KTD4 write-once).
+        """Return earliest-per-key marker with observe SUCCESS.
 
-        A seed observation is the row whose observed_date equals this
-        account's first_snapshot_date. Later inserts cannot change the
-        date this reader returns.
+        This is BY DESIGN (KTD4). A seed observation is the row whose
+        observed_date equals this account's first valid snapshot date. An
+        orphaned marker cannot bind a seed; a later insert can supply the first
+        valid marker.
         """
         sql = (
             f"SELECT\n"
             f"  first_snapshot_date\n"
             f"FROM (\n"
             f"  SELECT\n"
-            f"    first_snapshot_date,\n"
+            f"    f.first_snapshot_date,\n"
             f"    ROW_NUMBER() OVER (\n"
-            f"      PARTITION BY account_id\n"
-            f"      ORDER BY set_at ASC\n"
+            f"      PARTITION BY f.account_id\n"
+            f"      ORDER BY f.set_at ASC\n"
             f"    ) AS rn\n"
-            f"  FROM `{self._table_id('first_snapshot')}`\n"
-            f"  WHERE account_id = @account_id\n"
+            f"  FROM `{self._table_id('first_snapshot')}` AS f\n"
+            f"  INNER JOIN `{self._table_id('stages')}` AS s\n"
+            f"    ON s.run_id = f.run_id\n"
+            f"    AND s.account_id = f.account_id\n"
+            f"    AND s.event_ts >= "
+            f"TIMESTAMP(DATE_SUB(CURRENT_DATE(), INTERVAL 37 MONTH))\n"
+            f"  WHERE f.account_id = @account_id\n"
+            f"    AND s.stage = 'observe'\n"
+            f"    AND s.status = 'SUCCESS'\n"
             f")\n"
             f"WHERE rn = 1"
         )

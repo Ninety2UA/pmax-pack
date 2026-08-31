@@ -166,10 +166,99 @@ def test_local_path_loads(tmp_path: Path):
     assert cfg.datasets.raw == "pmax_raw"
 
 
+@pytest.mark.parametrize(
+    ("scratch_field", "production_field"),
+    [
+        (scratch_field, production_field)
+        for scratch_field in (
+            "parity_scratch",
+            "parity_scratch_bq",
+            "ci_scratch",
+            "ci_scratch_bq",
+        )
+        for production_field in (
+            "raw",
+            "marts",
+            "ops",
+            "snapshots",
+            "marts_verify",
+        )
+    ],
+)
+def test_scratch_dataset_cannot_alias_a_production_dataset(
+    scratch_field,
+    production_field,
+) -> None:
+    datasets = {
+        "raw": "custom_raw",
+        "marts": "custom_marts",
+        "ops": "custom_ops",
+        "snapshots": "custom_snapshots",
+        "parity_scratch": "custom_parity_scratch",
+        "parity_scratch_bq": "custom_parity_scratch_bq",
+        "ci_scratch": "custom_ci_scratch",
+        "ci_scratch_bq": "custom_ci_scratch_bq",
+        "marts_verify": "custom_marts_verify",
+    }
+    datasets[scratch_field] = datasets[production_field]
+
+    with pytest.raises(ValueError) as exc:
+        parse_config(_valid_raw(datasets=datasets))
+
+    assert str(exc.value).startswith(f"datasets.{scratch_field}:")
+
+
+def test_all_dataset_names_must_be_distinct() -> None:
+    with pytest.raises(ValueError) as exc:
+        parse_config(
+            _valid_raw(
+                datasets={
+                    "raw": "shared_dataset",
+                    "marts": "shared_dataset",
+                }
+            )
+        )
+
+    assert "datasets.marts" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "parity_scratch",
+        "parity_scratch_bq",
+        "ci_scratch",
+        "ci_scratch_bq",
+    ],
+)
+def test_scratch_dataset_requires_its_documented_suffix(field) -> None:
+    with pytest.raises(ValueError) as exc:
+        parse_config(_valid_raw(datasets={field: f"custom_{field}_temporary"}))
+
+    assert f"datasets.{field}" in str(exc.value)
+
+
+def test_default_dataset_names_pass_isolation_validation() -> None:
+    config = parse_config(_valid_raw())
+
+    assert config.datasets.parity_scratch == "pmax_parity_scratch"
+    assert config.datasets.parity_scratch_bq == "pmax_parity_scratch_bq"
+
+
 def test_start_date_defaults_to_run_date_minus_90():
     run = date(2026, 8, 26)
     cfg = parse_config(_valid_raw(), run_date=run)
     assert cfg.start_date == run - timedelta(days=90)
+    assert cfg.checkpoint_start_date == "default-90d"
+
+
+def test_explicit_start_date_is_its_checkpoint_token():
+    cfg = parse_config(
+        _valid_raw(start_date="2026-05-28"),
+        run_date=date(2026, 8, 26),
+    )
+    assert cfg.start_date == date(2026, 5, 28)
+    assert cfg.checkpoint_start_date == "2026-05-28"
 
 
 def test_accounts_must_be_ten_digit_strings():

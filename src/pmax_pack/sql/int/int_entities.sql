@@ -68,6 +68,15 @@ CREATE TABLE IF NOT EXISTS `{{ project }}.{{ marts_dataset }}.int_entities_campa
 PARTITION BY snapshot_date
 CLUSTER BY account_id, campaign_id, asset_id;
 
+CREATE TABLE IF NOT EXISTS `{{ project }}.{{ marts_dataset }}.int_entities_customer_asset` (
+  snapshot_date DATE, account_id INT64, asset_id INT64,
+  asset_resource_name STRING, field_type STRING, status STRING,
+  primary_status STRING, primary_status_reasons ARRAY<STRING>,
+  source_run_id STRING, built_by_run_id STRING
+)
+PARTITION BY snapshot_date
+CLUSTER BY account_id, asset_id, field_type;
+
 CREATE TABLE IF NOT EXISTS `{{ project }}.{{ marts_dataset }}.int_entities_conversion_action` (
   snapshot_date DATE, account_id INT64, conversion_action_id INT64,
   conversion_action_name STRING, category STRING, counting_type STRING,
@@ -96,6 +105,7 @@ DELETE FROM `{{ project }}.{{ marts_dataset }}.int_entities_asset_group` WHERE s
 DELETE FROM `{{ project }}.{{ marts_dataset }}.int_entities_asset` WHERE snapshot_date = @as_of;
 DELETE FROM `{{ project }}.{{ marts_dataset }}.int_entities_asset_group_signal` WHERE snapshot_date = @as_of;
 DELETE FROM `{{ project }}.{{ marts_dataset }}.int_entities_campaign_asset` WHERE snapshot_date = @as_of;
+DELETE FROM `{{ project }}.{{ marts_dataset }}.int_entities_customer_asset` WHERE snapshot_date = @as_of;
 DELETE FROM `{{ project }}.{{ marts_dataset }}.int_entities_conversion_action` WHERE snapshot_date = @as_of;
 DELETE FROM `{{ project }}.{{ marts_dataset }}.int_entities_customer` WHERE snapshot_date = @as_of;
 
@@ -330,6 +340,15 @@ SELECT n.next_complete_date, n.account_id, n.campaign_id, CAST(NULL AS INT64),
   CAST(NULL AS DATE), TRUE, 'inferred-removed', CAST(NULL AS STRING), @run_id
 FROM next_complete AS n
 WHERE n.next_complete_date = @as_of;
+
+INSERT INTO `{{ project }}.{{ marts_dataset }}.int_entities_customer_asset`
+SELECT s.snapshot_date, s.account_id, s.asset_id, s.asset_resource_name,
+  s.field_type, s.status, s.primary_status, s.primary_status_reasons,
+  s.source_run_id, @run_id
+FROM `{{ project }}.{{ marts_dataset }}.stg_entities_customer_asset` AS s
+JOIN `{{ project }}.{{ marts_dataset }}.int_complete_snapshot_days` AS c
+  USING (account_id, snapshot_date)
+WHERE s.snapshot_date = @as_of;
 
 INSERT INTO `{{ project }}.{{ marts_dataset }}.int_entities_conversion_action`
 WITH

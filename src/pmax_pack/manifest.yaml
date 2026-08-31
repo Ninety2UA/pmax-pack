@@ -72,6 +72,24 @@ steps:
     depends_on: []
     partition_field: snapshot_date
     clustering_fields: [account_id]
+  - name: mart_cohort_campaign
+    kind: ddl
+    sql: ddl/mart_cohort_campaign.sql
+    depends_on: []
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, metric_basis]
+  - name: mart_cohort_asset_group
+    kind: ddl
+    sql: ddl/mart_cohort_asset_group.sql
+    depends_on: []
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, asset_group_id, metric_basis]
+  - name: mart_cohort_asset
+    kind: ddl
+    sql: ddl/mart_cohort_asset.sql
+    depends_on: []
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, asset_id, metric_basis]
 
   - name: stg_performance
     kind: table
@@ -131,6 +149,24 @@ steps:
       - v_int_entities_customer
     partition_field: date
     clustering_fields: [account_id, campaign_id]
+  - name: int_lookback_windows
+    kind: table
+    sql: int/int_lookback_windows.sql
+    depends_on: [int_performance, int_entities]
+    partition_field: click_date
+    clustering_fields: [account_id, metric_basis, conversion_action_id]
+  - name: int_lag_prefix
+    kind: table
+    sql: int/int_lag_prefix.sql
+    depends_on: [stg_performance, int_lookback_windows, int_performance]
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, metric_basis]
+  - name: int_observation_cells
+    kind: table
+    sql: int/int_observation_cells.sql
+    depends_on: [int_performance, int_lookback_windows]
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, asset_id, metric_basis]
 
   - name: build_mart_entities_campaign
     kind: table
@@ -204,6 +240,56 @@ steps:
     depends_on: [mart_campaign_truth, int_performance]
     partition_field: date
     clustering_fields: [account_id, campaign_id]
+  - name: build_mart_cohort_campaign
+    kind: table
+    sql: mart/mart_cohort_campaign.sql
+    depends_on: [mart_cohort_campaign, int_lag_prefix, int_performance]
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, metric_basis]
+  - name: build_mart_cohort_asset_group
+    kind: table
+    sql: mart/mart_cohort_asset_group.sql
+    depends_on: [mart_cohort_asset_group, int_lag_prefix, int_performance]
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, asset_group_id, metric_basis]
+  - name: build_mart_cohort_asset
+    kind: table
+    sql: mart/mart_cohort_asset.sql
+    depends_on: [mart_cohort_asset, int_observation_cells, int_performance]
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, asset_id, metric_basis]
+
+  - name: mart_bp_campaign
+    kind: table
+    sql: mart/mart_bp_campaign.sql
+    depends_on:
+      - build_mart_entities_campaign
+      - build_mart_entities_asset_group
+      - build_mart_entities_asset
+      - build_mart_entities_asset_group_signal
+      - build_mart_entities_campaign_asset
+      - int_entities
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id]
+  - name: mart_bp_asset_group
+    kind: table
+    sql: mart/mart_bp_asset_group.sql
+    depends_on:
+      - build_mart_entities_campaign
+      - build_mart_entities_asset_group
+      - build_mart_entities_asset
+      - build_mart_entities_asset_group_signal
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: mart_bp_extended
+    kind: table
+    sql: mart/mart_bp_extended.sql
+    depends_on:
+      - mart_bp_asset_group
+      - build_mart_entities_asset_group
+      - build_mart_entities_asset
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
 
   - name: v_performance_campaign
     kind: view
@@ -225,6 +311,18 @@ steps:
     kind: view
     sql: views/v_campaign_truth.sql
     depends_on: [build_mart_campaign_truth]
+  - name: v_cohort_campaign
+    kind: view
+    sql: views/v_cohort_campaign.sql
+    depends_on: [build_mart_cohort_campaign]
+  - name: v_cohort_asset_group
+    kind: view
+    sql: views/v_cohort_asset_group.sql
+    depends_on: [build_mart_cohort_asset_group]
+  - name: v_cohort_asset
+    kind: view
+    sql: views/v_cohort_asset.sql
+    depends_on: [build_mart_cohort_asset]
 
   - name: assert_unique_keys
     kind: assertion
@@ -242,6 +340,9 @@ steps:
       - build_mart_entities_campaign_asset
       - build_mart_entities_conversion_action
       - build_mart_entities_customer
+      - mart_bp_campaign
+      - mart_bp_asset_group
+      - mart_bp_extended
     severity: HARD
   - name: assert_not_null
     kind: assertion
@@ -251,6 +352,21 @@ steps:
       - build_mart_performance_asset_group
       - build_mart_asset_performance
     severity: HARD
+  - name: assert_cohort_integrity
+    kind: assertion
+    sql: assertions/assert_cohort_integrity.sql
+    depends_on:
+      - build_mart_cohort_campaign
+      - build_mart_cohort_asset_group
+      - build_mart_cohort_asset
+    severity: HARD
+  - name: assert_cohort_observation_reconciliation
+    kind: assertion
+    sql: assertions/assert_cohort_observation_reconciliation.sql
+    depends_on:
+      - int_observation_cells
+      - build_mart_cohort_asset_group
+    severity: SOFT
   - name: assert_row_count_floor
     kind: assertion
     sql: assertions/assert_row_count_floor.sql
@@ -268,3 +384,52 @@ steps:
       - build_mart_entities_campaign_asset
       - build_mart_entities_conversion_action
     severity: HARD
+  - name: assert_asset_not_over_campaign
+    kind: assertion
+    sql: assertions/assert_asset_not_over_campaign.sql
+    depends_on:
+      - build_mart_asset_performance
+      - build_mart_campaign_truth
+    severity: SOFT
+  - name: assert_campaign_reconciliation
+    kind: assertion
+    sql: assertions/assert_campaign_reconciliation.sql
+    depends_on:
+      - build_mart_performance_campaign
+      - build_mart_campaign_truth
+    severity: SOFT
+  - name: assert_cross_grain_identity
+    kind: assertion
+    sql: assertions/assert_cross_grain_identity.sql
+    depends_on:
+      - build_mart_cohort_campaign
+      - build_mart_cohort_asset_group
+    severity: SOFT
+  - name: assert_cohort_reconciliation
+    kind: assertion
+    sql: assertions/assert_cohort_reconciliation.sql
+    depends_on:
+      - build_mart_performance_campaign
+      - build_mart_performance_asset_group
+      - build_mart_cohort_campaign
+      - build_mart_cohort_asset_group
+    severity: SOFT
+  - name: assert_required_tables_nonempty
+    kind: assertion
+    sql: assertions/assert_required_tables_nonempty.sql
+    depends_on:
+      - int_lag_prefix
+      - build_mart_performance_campaign
+      - build_mart_performance_asset_group
+      - build_mart_entities_customer
+      - build_mart_entities_campaign
+      - build_mart_cohort_campaign
+      - build_mart_cohort_asset_group
+    severity: HARD
+  - name: assert_serving_budget_has_cost
+    kind: assertion
+    sql: assertions/assert_serving_budget_has_cost.sql
+    depends_on:
+      - build_mart_entities_campaign
+      - build_mart_campaign_truth
+    severity: SOFT

@@ -71,7 +71,10 @@ def test_ops_google_ads_ids_are_int64_and_placeholders_exist():
     assert ck["account_id"].field_type in {"INT64", "INTEGER"}
     snap = {f.name: f for f in OPS_TABLES["first_snapshot"].fields}
     assert snap["account_id"].field_type in {"INT64", "INTEGER"}
-    assert OBSERVATION_TABLE is None
+    assert OBSERVATION_TABLE is not None
+    assert OBSERVATION_TABLE.name == "raw_observations"
+    assert OBSERVATION_TABLE.partition_field == "observed_date"
+    assert OBSERVATION_TABLE.dataset_key == "raw"
     assert OPS_TABLES["runs"].clustering_fields == ["run_id"]
     assert OPS_TABLES["load_checkpoints"].clustering_fields == ["account_id"]
     assert OPS_TABLES["first_snapshot"].clustering_fields == ["account_id"]
@@ -582,6 +585,15 @@ def test_first_snapshot_date_reader_sql(bq_client):
     sql = bq_client.queries[0]
     assert "first_snapshot" in sql
     assert "account_id" in sql
+    assert "INNER JOIN" in sql
+    assert "stages" in sql
+    assert "s.run_id = f.run_id" in sql
+    assert "s.account_id = f.account_id" in sql
+    assert (
+        "s.event_ts >= TIMESTAMP(DATE_SUB(CURRENT_DATE(), INTERVAL 37 MONTH))" in sql
+    )
+    assert "s.stage = 'observe'" in sql
+    assert "s.status = 'SUCCESS'" in sql
 
 
 def test_default_clock_samples_fresh_per_event(bq_client):

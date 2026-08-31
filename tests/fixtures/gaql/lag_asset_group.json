@@ -8,6 +8,8 @@
     "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
     "conversion_action_name": "Action 475576146142245",
     "conversion_lag_bucket": "LESS_THAN_ONE_DAY",
+    "all_conversions": 1.4246676784949618,
+    "all_conversions_value": 20.299978933273614,
     "conversions": 1.3246676784949618,
     "conversions_value": 19.299978933273614,
     "date": "2026-08-20"
@@ -21,6 +23,8 @@
     "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
     "conversion_action_name": "Action 475576146142245",
     "conversion_lag_bucket": "ONE_TO_TWO_DAYS",
+    "all_conversions": 0.47880609974661277,
+    "all_conversions_value": 5.194845139895615,
     "conversions": 0.42880609974661277,
     "conversions_value": 4.694845139895615,
     "date": "2026-08-20"
@@ -34,6 +38,8 @@
     "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
     "conversion_action_name": "Action 475576146142245",
     "conversion_lag_bucket": "LESS_THAN_ONE_DAY",
+    "all_conversions": 1.242555366052759,
+    "all_conversions_value": 12.19678693400611,
     "conversions": 1.142555366052759,
     "conversions_value": 11.19678693400611,
     "date": "2026-08-20"
@@ -47,6 +53,8 @@
     "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
     "conversion_action_name": "Action 475576146142245",
     "conversion_lag_bucket": "ONE_TO_TWO_DAYS",
+    "all_conversions": 0.4076651552941903,
+    "all_conversions_value": 4.888746772574068,
     "conversions": 0.3576651552941903,
     "conversions_value": 4.388746772574068,
     "date": "2026-08-20"

@@ -5,7 +5,26 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 PRODUCT = Path(__file__).resolve().parents[2]
+
+
+def _private_terms() -> list[str]:
+    """All scrub terms from the publish-excluded private file; skip when absent
+    (public checkout). Sensitive values never appear in published source."""
+    terms_path = PRODUCT / "deployments" / "scrub-terms.txt"
+    if not terms_path.exists():
+        pytest.skip("private scrub-terms file absent (public checkout)")
+    return [
+        line.strip()
+        for line in terms_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
+
+
+def numeric_private_terms() -> list[str]:
+    return [term for term in _private_terms() if term.isdigit() and len(term) >= 9]
 SCRIPT = PRODUCT / "scripts" / "anonymize_capture.py"
 FIXTURES = PRODUCT / "tests" / "fixtures" / "gaql"
 
@@ -169,12 +188,28 @@ def _write_capture(root: Path) -> None:
             "conversion_action_id": SRC_ACTION,
         }
     ]
+    customer_assets = [
+        {
+            "account_id": SRC_ACCOUNT,
+            "asset_id": SRC_ASSET,
+            "asset_resource_name": (
+                f"customers/{SRC_ACCOUNT}/assets/{SRC_ASSET}"
+            ),
+            "field_type": "SITELINK",
+            "status": "ENABLED",
+            "primary_status": "ELIGIBLE",
+            "primary_status_reasons": [],
+        }
+    ]
     (root / "volume_campaign.json").write_text(json.dumps(volume), encoding="utf-8")
     (root / "conv_campaign.json").write_text(json.dumps(conv), encoding="utf-8")
     (root / "conv_asset_group.json").write_text(json.dumps(conv_ag), encoding="utf-8")
     (root / "lag_campaign.json").write_text(json.dumps(lag), encoding="utf-8")
     (root / "lag_asset_group.json").write_text(json.dumps(lag_ag), encoding="utf-8")
     (root / "entities_asset.json").write_text(json.dumps(entities), encoding="utf-8")
+    (root / "entities_customer_asset.json").write_text(
+        json.dumps(customer_assets), encoding="utf-8"
+    )
 
 
 def test_anonymize_rekeys_ids_consistently_and_perturbs(tmp_path):
@@ -191,11 +226,17 @@ def test_anonymize_rekeys_ids_consistently_and_perturbs(tmp_path):
     lag_ag = json.loads((dst / "lag_asset_group.json").read_text(encoding="utf-8"))
     conv_ag = json.loads((dst / "conv_asset_group.json").read_text(encoding="utf-8"))
     ent = json.loads((dst / "entities_asset.json").read_text(encoding="utf-8"))
+    customer_asset = json.loads(
+        (dst / "entities_customer_asset.json").read_text(encoding="utf-8")
+    )
     assert vol[0]["account_id"] != SRC_ACCOUNT
     assert vol[0]["campaign_id"] != SRC_CAMPAIGN
     assert vol[0]["account_id"] == conv[0]["account_id"] == lag[0]["account_id"]
     assert vol[0]["campaign_id"] == conv[0]["campaign_id"] == lag[0]["campaign_id"]
     assert ent[0]["account_id"] == vol[0]["account_id"]
+    assert customer_asset[0]["account_id"] == vol[0]["account_id"]
+    assert customer_asset[0]["asset_id"] == ent[0]["asset_id"]
+    assert str(SRC_ACCOUNT) not in customer_asset[0]["asset_resource_name"]
     assert "conversion_action_id" not in conv[0]
     assert vol[0]["all_conversions"] >= vol[0]["conversions"]
     lag_sum = sum(r["conversions"] for r in lag)
@@ -259,19 +300,20 @@ def test_fixtures_are_script_output():
     assert str(SRC_ACCOUNT) not in blob
     for path in files:
         text = path.read_text(encoding="utf-8")
-        banned = ("moj" + "bankar").lower()
-        assert banned not in text.lower()
         assert "1//0" not in text
-        assert "69960" + "09890" not in text
+        for term in _private_terms():
+            assert term.lower() not in text.lower()
     from pmax_pack.schema import RAW_TABLES
 
     assert {p.stem for p in files} == set(RAW_TABLES)
 
 
 def test_tests_directory_has_no_runtime_assembled_real_ids():
-    account = "69960" + "09890"
-    campaign = "19561" + "026917"
-    mcc = "32807" + "91650"
+    """Private-id canary. The sensitive ids live ONLY in the publish-excluded
+    deployments/scrub-terms.txt (never in published source, joined or split);
+    on a public checkout without that file the canary skips."""
+    numeric_ids = numeric_private_terms()
+    assert numeric_ids, "expected numeric private ids among the scrub terms"
     root = Path(__file__).resolve().parents[1]
     hits = []
     for path in root.rglob("*"):
@@ -283,6 +325,6 @@ def test_tests_directory_has_no_runtime_assembled_real_ids():
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        if account in text or campaign in text or mcc in text:
+        if any(term in text for term in numeric_ids):
             hits.append(str(path.relative_to(root)))
     assert hits == []

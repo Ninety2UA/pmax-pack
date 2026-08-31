@@ -159,6 +159,34 @@ def test_a2_assignment_in_txt_is_hit(tmp_path: Path):
     assert planted not in blob
 
 
+def test_oidc_permission_in_trusted_workflow_is_allowed(tmp_path: Path):
+    workflow = tmp_path / ".github" / "workflows" / "trusted.yml"
+    workflow.parent.mkdir(parents=True)
+    oidc_permission = "id-token" + ": write"
+    workflow.write_text(f"permissions:\n  {oidc_permission}\n", encoding="utf-8")
+    result = _run([str(tmp_path)])
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "line"),
+    [
+        (".github/workflows/trusted.yml", "id-token" + ": planted-value"),
+        ("notes.yml", "id-token" + ": write"),
+        (".github/workflows/trusted.yml", "api_token" + ": planted-value"),
+    ],
+)
+def test_oidc_exception_does_not_allow_token_assignments(
+    tmp_path: Path, relative_path: str, line: str
+):
+    path = tmp_path / relative_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(line + "\n", encoding="utf-8")
+    result = _run([str(tmp_path)])
+    assert result.returncode == 1
+    assert "credential_assignment" in result.stdout + result.stderr
+
+
 def test_a3_denylist_terms_match_case_insensitively(tmp_path: Path):
     scan = tmp_path / "scan"
     scan.mkdir()
@@ -261,3 +289,110 @@ def test_scrub_check_clean_on_product_tree():
     result = _run([str(PRODUCT)])
     blob = result.stdout + result.stderr
     assert result.returncode == 0, blob
+
+
+def test_tree_scan_skips_workspace_record_folders(tmp_path: Path):
+    """plans/ and learnings/ are OS-anatomy records that never publish; the
+    same credential key name under src/ is still a hit."""
+    body = "the finding quoted refresh" + "_token: 1//abc as the tested shape\n"
+    for folder in ("plans", "learnings"):
+        record = tmp_path / folder / "reviews" / "note.md"
+        record.parent.mkdir(parents=True)
+        record.write_text(body, encoding="utf-8")
+    result = _run([str(tmp_path)])
+    assert result.returncode == 0, result.stdout + result.stderr
+    src = tmp_path / "src" / "note.md"
+    src.parent.mkdir()
+    src.write_text(body, encoding="utf-8")
+    result = _run([str(tmp_path)])
+    assert result.returncode == 1
+    assert "src" in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("record_dir", ("plans", "learnings"))
+def test_nested_docs_record_dir_credential_shape_is_a_hit(
+    tmp_path: Path, record_dir: str
+):
+    """Root-anchored skip: docs/<RECORD_DIR>/ is not the product record folder."""
+    body = "the finding quoted refresh" + "_token: 1//abc as the tested shape\n"
+    nested = tmp_path / "docs" / record_dir / "note.md"
+    nested.parent.mkdir(parents=True)
+    nested.write_text(body, encoding="utf-8")
+    result = _run([str(tmp_path)])
+    blob = result.stdout + result.stderr
+    assert result.returncode == 1, blob
+    assert "note.md" in blob
+    assert "1//abc" not in blob
+
+
+@pytest.mark.parametrize("file_name", ("plans", "learnings"))
+def test_top_level_file_named_like_record_dir_is_scanned(
+    tmp_path: Path, file_name: str
+) -> None:
+    body = "the finding quoted refresh" + "_token: 1//abc as the tested shape\n"
+    (tmp_path / file_name).write_text(body, encoding="utf-8")
+
+    result = _run([str(tmp_path)])
+
+    blob = result.stdout + result.stderr
+    assert result.returncode == 1, blob
+    assert file_name in blob
+    assert "1//abc" not in blob
+
+
+def test_record_dirs_disjoint_from_cache_dir_names():
+    spec = importlib.util.spec_from_file_location(
+        "scrub_check_mod_disjoint", SCRUB
+    )
+    mod = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(mod)
+    assert mod.RECORD_DIRS.isdisjoint(mod.CACHE_DIR_NAMES)
+
+
+def test_nested_cache_dir_skip_is_depth_agnostic(tmp_path: Path):
+    """Cache/venv names skip at any depth under the scan root, not only parts[0]."""
+    body = "the finding quoted refresh" + "_token: 1//abc as the tested shape\n"
+    nested = tmp_path / "src" / ".venv" / "lib" / "leak.txt"
+    nested.parent.mkdir(parents=True)
+    nested.write_text(body, encoding="utf-8")
+    result = _run([str(tmp_path)])
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    real = tmp_path / "src" / "real" / "leak.txt"
+    real.parent.mkdir(parents=True)
+    real.write_text(body, encoding="utf-8")
+    result = _run([str(tmp_path)])
+    blob = result.stdout + result.stderr
+    assert result.returncode == 1, blob
+    assert "real" in blob
+    assert ".venv" not in blob
+    assert "1//abc" not in blob
+
+
+def test_scan_root_under_cache_named_ancestor_still_scans(tmp_path: Path):
+    """Ancestor cache/venv names of the scan root are never inspected."""
+    body = "the finding quoted refresh" + "_token: 1//abc as the tested shape\n"
+    scan = tmp_path / "venv" / "scanroot"
+    scan.mkdir(parents=True)
+    leak = scan / "file.txt"
+    leak.write_text(body, encoding="utf-8")
+    result = _run([str(scan)])
+    blob = result.stdout + result.stderr
+    assert result.returncode == 1, blob
+    assert "file.txt" in blob
+    assert "1//abc" not in blob
+
+
+def test_scan_root_parent_named_plans_still_scans_files(tmp_path: Path):
+    """Ancestor directory names of the scan root are never inspected."""
+    body = "the finding quoted refresh" + "_token: 1//abc as the tested shape\n"
+    scan = tmp_path / "plans" / "scanroot"
+    scan.mkdir(parents=True)
+    leak = scan / "note.md"
+    leak.write_text(body, encoding="utf-8")
+    result = _run([str(scan)])
+    blob = result.stdout + result.stderr
+    assert result.returncode == 1, blob
+    assert "note.md" in blob
+    assert "1//abc" not in blob

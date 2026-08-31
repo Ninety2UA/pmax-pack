@@ -340,6 +340,8 @@ RAW_TABLES: dict[str, TableSpec] = {
             _sf("conversion_lag_bucket", "STRING"),
             _sf("conversions", "FLOAT"),
             _sf("conversions_value", "FLOAT"),
+            _sf("all_conversions", "FLOAT"),
+            _sf("all_conversions_value", "FLOAT"),
         ],
         "date",
         ["account_id", "campaign_id"],
@@ -359,6 +361,8 @@ RAW_TABLES: dict[str, TableSpec] = {
             _sf("conversion_lag_bucket", "STRING"),
             _sf("conversions", "FLOAT"),
             _sf("conversions_value", "FLOAT"),
+            _sf("all_conversions", "FLOAT"),
+            _sf("all_conversions_value", "FLOAT"),
         ],
         "date",
         ["account_id", "campaign_id", "asset_group_id"],
@@ -506,6 +510,22 @@ RAW_TABLES: dict[str, TableSpec] = {
         ["account_id", "campaign_id", "asset_id"],
         "Family D: campaign-level assets (sitelinks and others).",
     ),
+    "entities_customer_asset": _raw_spec(
+        "entities_customer_asset",
+        [
+            _sf("account_id", "INT64", "REQUIRED"),
+            _sf("asset_id", "INT64"),
+            _sf("snapshot_date", "DATE", "REQUIRED"),
+            _sf("asset_resource_name", "STRING", "REQUIRED"),
+            _sf("field_type", "STRING"),
+            _sf("status", "STRING"),
+            _sf("primary_status", "STRING"),
+            _sf("primary_status_reasons", "STRING", "REPEATED"),
+        ],
+        "snapshot_date",
+        ["account_id", "asset_id", "field_type"],
+        "Family D: account-level assets needed for sitelink score parity.",
+    ),
     "entities_conversion_action": _raw_spec(
         "entities_conversion_action",
         [
@@ -542,6 +562,37 @@ RAW_TABLES: dict[str, TableSpec] = {
     ),
 }
 
-# U13 fills OBSERVATION_TABLE (raw_observations, partition observed_date,
-# never-expire, never-rewrite).
-OBSERVATION_TABLE: TableSpec | None = None
+# Append-only observation log (KTD4). Partitioned by observed_date; never
+# expire; never rewrite. Seed identity is observed_date = first_snapshot_date
+# in the ledger, not a stored flag.
+OBSERVATION_TABLE: TableSpec = TableSpec(
+    name="raw_observations",
+    dataset_key="raw",
+    fields=[
+        _sf("run_id", "STRING", "REQUIRED"),
+        _sf("observed_date", "DATE", "REQUIRED"),
+        _sf("account_id", "INT64", "REQUIRED"),
+        _sf("click_date", "DATE", "REQUIRED"),
+        _sf("lag", "INT64", "REQUIRED"),
+        _sf("grain", "STRING", "REQUIRED"),
+        _sf("campaign_id", "INT64", "REQUIRED"),
+        _sf("asset_group_id", "INT64"),
+        _sf("asset_id", "INT64"),
+        _sf("field_type", "STRING"),
+        _sf("ad_network_type", "STRING"),
+        _sf("metric_basis", "STRING", "REQUIRED"),
+        _sf("conversion_action", "STRING"),
+        _sf("conversion_action_name", "STRING"),
+        _sf("conversions", "FLOAT"),
+        _sf("conversions_value", "FLOAT"),
+    ],
+    partition_field="observed_date",
+    partition_type="DAY",
+    clustering_fields=["account_id", "campaign_id", "asset_id"],
+    description=(
+        "Append-only observation log: one row set per (observed_date, run_id, "
+        "account) as a projection of family A (PRIMARY and ALL_CONVERSIONS) "
+        "and family B (CONVERSION_ACTION) raw partitions. Never expire, never "
+        "rewrite (KTD4)."
+    ),
+)

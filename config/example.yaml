@@ -7,7 +7,8 @@ accounts:
 bulk_expansion: false
 # mcc: "1234567890"
 
-# ISO date. When omitted the pack defaults to run date minus 90 days.
+# ISO date. When omitted, the window defaults to run date minus 90 days and
+# the checkpoint hash uses the stable "default-90d" token.
 # start_date: "2026-05-28"
 
 restatement_margin_days: 7
@@ -20,9 +21,10 @@ tolerances:
   campaign_reconciliation: 0.01
   asset_vs_campaign: 0.0
   cross_grain: 0.0
-  parity: 0.0
+  parity: 0.01
 
-# timezone_override: "Europe/Berlin"
+# Deploy preflight requires an explicit IANA timezone for Scheduler and cohorts.
+timezone_override: "Europe/Berlin"
 
 deployment:
   project: your-project-id

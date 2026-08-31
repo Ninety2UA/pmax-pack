@@ -8,7 +8,9 @@ SELECT
   segments.conversion_action_name AS conversion_action_name,
   segments.conversion_lag_bucket AS conversion_lag_bucket,
   metrics.conversions AS conversions,
-  metrics.conversions_value AS conversions_value
+  metrics.conversions_value AS conversions_value,
+  metrics.all_conversions AS all_conversions,
+  metrics.all_conversions_value AS all_conversions_value
 FROM campaign
 WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
   AND segments.date BETWEEN '{start_date}' AND '{end_date}'

@@ -14,6 +14,7 @@ from __future__ import annotations
 import calendar
 import hashlib
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -43,6 +44,7 @@ QUERY_FAMILIES: dict[str, tuple[str, ...]] = {
         "entities_asset",
         "entities_asset_group_signal",
         "entities_campaign_asset",
+        "entities_customer_asset",
         "entities_conversion_action",
         "entities_customer",
     ),
@@ -280,6 +282,7 @@ def extract_accounts(
                             row["snapshot_date"] = snap.isoformat()
                             stage_rows(staging, name, snap, [row])
                         continue
+                    stage_rows(staging, name, window_end, [])
                     for row in rows:
                         day = _row_day(row, snapshot=False)
                         if day is None:
@@ -324,14 +327,13 @@ class BackfillPlan:
     pending: list[str]
     checkpoint_hash: str
     pending_by_account: dict[str, list[str]] = field(default_factory=dict)
-    frozen_by_account: dict[str, list[str]] = field(default_factory=dict)
 
 
 def checkpoint_hash_for(config: Config) -> str:
     from pmax_pack.pipeline import compute_checkpoint_hash
 
     return compute_checkpoint_hash(
-        all_query_texts(), config.api_version, config.start_date
+        all_query_texts(), config.api_version, config.checkpoint_start_date
     )
 
 
@@ -352,8 +354,9 @@ def backfill_plan(
 
     `accounts` is the resolved set (R1). When `checkpoint_hash` is passed
     (the run-start hash), this function does not read query files (KTD3).
-    Pending/frozen state is derived per resolved account; required families
-    are A, B, C (family D is a once-per-run as-of snapshot, not a chunk).
+    Pending state is derived per selected plan account; required families are
+    A, B, C (family D is a once-per-run as-of snapshot, not a chunk). Frozen
+    chunks are queried once by the report collector that consumes them.
     """
     wall = wall_start(run_date)
     start = config.start_date
@@ -369,7 +372,6 @@ def backfill_plan(
     ck_hash = checkpoint_hash if checkpoint_hash is not None else checkpoint_hash_for(config)
     resolved = _resolved_accounts(config, accounts)
     pending_by_account: dict[str, list[str]] = {}
-    frozen_by_account: dict[str, list[str]] = {}
     pending: list[str] = []
     seen: set[str] = set()
     for account in resolved:
@@ -381,11 +383,6 @@ def backfill_plan(
             FACT_FAMILIES,
         )
         pending_by_account[str(account)] = list(acct_pending)
-        frozen = []
-        frozen_fn = getattr(ledger, "frozen_chunks", None)
-        if callable(frozen_fn):
-            frozen = list(frozen_fn(account, wall, chunks))
-        frozen_by_account[str(account)] = frozen
         for chunk in acct_pending:
             if chunk not in seen:
                 pending.append(chunk)
@@ -398,7 +395,6 @@ def backfill_plan(
         pending=pending,
         checkpoint_hash=ck_hash,
         pending_by_account=pending_by_account,
-        frozen_by_account=frozen_by_account,
     )
 
 
@@ -441,32 +437,40 @@ def run_backfill(
     fetcher: Any,
     bq_client: Any,
     accounts: list[str],
+    plan_accounts: list[str] | None = None,
     run_id: str,
     loaded_at: datetime,
     families: Iterable[str] = FACT_FAMILIES,
     checkpoint_hash: str | None = None,
+    plan: BackfillPlan | None = None,
+    lease: Any | None = None,
+    now_fn: Callable[[], datetime] | None = None,
 ) -> int:
     """Extract pending A/B/C chunks, flush, checkpoint; then one D snapshot.
 
     Chunks never extract family D. After every pending chunk succeeds,
     family D is queried once at `run_date` (as-of) and flushed. Checkpoints
-    carry only A/B/C. A failed flush does not write checkpoints.
+    carry only A/B/C. ``plan_accounts`` scopes checkpoint reads, while every
+    resolved ``account`` is extracted, union-written, and checkpointed. A
+    failed flush does not write checkpoints. The lease renews only after all
+    checkpoints for a successfully loaded chunk have advanced.
     """
     from pmax_pack.loader import flush_staged
 
-    plan = backfill_plan(
+    selected_plan = plan or backfill_plan(
         config,
         run_date,
         ledger,
-        accounts=accounts,
+        accounts=plan_accounts if plan_accounts is not None else accounts,
         checkpoint_hash=checkpoint_hash,
     )
+    clock = now_fn or (lambda: datetime.now(timezone.utc))
     family_list = tuple(fam for fam in families if fam != "D") or FACT_FAMILIES
     fact_specs = _table_specs_for(family_list)
     entity_specs = _table_specs_for(("D",))
     load_jobs = 0
-    for chunk in plan.pending:
-        start, end = chunk_bounds(chunk, plan.start, run_date)
+    for chunk in selected_plan.pending:
+        start, end = chunk_bounds(chunk, selected_plan.start, run_date)
         staging: dict[tuple[str, date], list[dict[str, Any]]] = {}
         log.info(
             "backfill chunk %s accounts=%s window=%s..%s families=%s",
@@ -507,10 +511,12 @@ def run_backfill(
                     account,
                     chunk,
                     family,
-                    plan.checkpoint_hash,
+                    selected_plan.checkpoint_hash,
                     run_id,
                     now=loaded_at,
                 )
+        if lease is not None:
+            lease.renew(clock())
     entity_staging: dict[tuple[str, date], list[dict[str, Any]]] = {}
     try:
         extract_accounts(

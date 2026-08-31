@@ -1,5 +1,5 @@
 BEGIN TRANSACTION;
-DELETE FROM `{{ project }}.{{ marts_dataset }}.mart_performance_campaign` WHERE date = @as_of;
+DELETE FROM `{{ project }}.{{ marts_dataset }}.mart_performance_campaign` WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of;
 INSERT INTO `{{ project }}.{{ marts_dataset }}.mart_performance_campaign`
 SELECT date, account_id, campaign_id, metric_basis, ad_network_type,
   conversion_action_id, conversion_action_resource_name,
@@ -14,5 +14,5 @@ SELECT date, account_id, campaign_id, metric_basis, ad_network_type,
   view_through_lookback_window_days, include_in_conversions_metric,
   conversion_action_type, attribute_provenance, @run_id
 FROM `{{ project }}.{{ marts_dataset }}.int_performance_campaign`
-WHERE date = @as_of;
+WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of;
 COMMIT TRANSACTION;

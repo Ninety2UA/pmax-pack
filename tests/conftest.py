@@ -154,11 +154,37 @@ class FakeStorageClient:
 
 
 class FakeQueryJob:
-    def __init__(self, rows: list[Any]) -> None:
+    def __init__(
+        self,
+        rows: list[Any],
+        *,
+        hang: bool = False,
+        query: str = "",
+    ) -> None:
         self._rows = rows
+        self._hang = hang
+        self.query = query
+        self.result_timeouts: list[float | None] = []
+        self.total_bytes_processed = 0
+        self.job_id = "fake-query"
 
-    def result(self) -> list[Any]:
+    def result(self, timeout: float | None = None) -> list[Any]:
+        self.result_timeouts.append(timeout)
+        if self._hang:
+            raise TimeoutError("extract did not complete within the timeout")
         return self._rows
+
+
+class FakeExtractJob:
+    def __init__(self, hang: bool = False) -> None:
+        self._hang = hang
+        self.result_timeouts: list[float | None] = []
+
+    def result(self, timeout: float | None = None) -> None:
+        self.result_timeouts.append(timeout)
+        if self._hang:
+            raise TimeoutError("extract did not complete within the timeout")
+        return None
 
 
 class FakeBQClient:
@@ -175,6 +201,13 @@ class FakeBQClient:
         self.queries: list[str] = []
         self.job_configs: list[Any] = []
         self.query_rows: list[Any] = []
+        self.query_rows_by_marker: dict[str, list[Any]] = {}
+        self.tables: dict[str, Any] = {}
+        self.extracts: list[dict[str, Any]] = []
+        self.extract_error: BaseException | None = None
+        self.extract_hangs: bool = False
+        self.query_jobs: list[FakeQueryJob] = []
+        self.calls: list[tuple[str, Any]] = []
 
     def insert_rows_json(
         self,
@@ -184,6 +217,7 @@ class FakeBQClient:
         skip_invalid_rows: bool | None = None,
         ignore_unknown_values: bool | None = None,
     ) -> list[dict[str, Any]]:
+        self.calls.append(("insert_rows_json", table))
         self.inserts.append((table, [dict(r) for r in json_rows]))
         if self.insert_errors is not None:
             return list(self.insert_errors)
@@ -198,9 +232,79 @@ class FakeBQClient:
         location: str | None = None,
         project: str | None = None,
     ) -> FakeQueryJob:
+        self.calls.append(("query", query))
         self.queries.append(query)
         self.job_configs.append(job_config)
-        return FakeQueryJob(list(self.query_rows))
+        is_export = "EXPORT DATA" in query
+        if is_export and self.extract_error is not None:
+            raise self.extract_error
+        rows = list(self.query_rows)
+        for marker, marked in self.query_rows_by_marker.items():
+            if marker in query:
+                rows = list(marked)
+                break
+        job = FakeQueryJob(
+            rows,
+            hang=is_export and self.extract_hangs,
+            query=query,
+        )
+        self.query_jobs.append(job)
+        return job
+
+    def get_table(
+        self,
+        table: str,
+        retry: Any = None,
+        timeout: Any = None,
+    ) -> Any:
+        key = str(table)
+        if key not in self.tables:
+            raise NotFound(key)
+        return self.tables[key]
+
+    def create_table(
+        self,
+        table: Any,
+        exists_ok: bool = False,
+        retry: Any = None,
+        timeout: Any = None,
+    ) -> Any:
+        tid = f"{table.project}.{table.dataset_id}.{table.table_id}"
+        self.tables[tid] = table
+        return table
+
+    def extract_table(
+        self,
+        source: Any,
+        destination_uris: Any,
+        job_id: str | None = None,
+        job_id_prefix: str | None = None,
+        location: str | None = None,
+        project: str | None = None,
+        job_config: Any = None,
+        retry: Any = None,
+        timeout: Any = None,
+        source_type: str = "Table",
+    ) -> FakeExtractJob:
+        uris = (
+            [destination_uris]
+            if isinstance(destination_uris, str)
+            else list(destination_uris)
+        )
+        source_sql = getattr(source, "query", None)
+        source_s = source_sql if isinstance(source_sql, str) else str(source)
+        self.calls.append(("extract_table", source_s))
+        self.extracts.append(
+            {
+                "source": source_s,
+                "destination_uris": uris,
+                "job_config": job_config,
+                "source_type": source_type,
+            }
+        )
+        if self.extract_error is not None:
+            raise self.extract_error
+        return FakeExtractJob(hang=self.extract_hangs)
 
 
 @pytest.fixture

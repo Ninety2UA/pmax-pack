@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -313,6 +313,25 @@ def test_rendered_staging_keeps_two_asset_links_and_latest_same_day_rerun(
             ("all_conversions_value", "DOUBLE"),
         ],
         [
+            (
+                "run-outside",
+                datetime(2026, 7, 18, 10),
+                "q",
+                1,
+                2,
+                3,
+                99,
+                "DESCRIPTION",
+                ctx.window_start - timedelta(days=1),
+                "SEARCH",
+                999,
+                99,
+                999,
+                99.0,
+                999.0,
+                99.0,
+                999.0,
+            ),
             ("run-a", datetime(2026, 8, 25, 10), "q", 1, 2, 3, 4, "HEADLINE", date(2026, 8, 25), "SEARCH", 10, 1, 100, 1.0, 2.0, 1.0, 2.0),
             ("run-b", datetime(2026, 8, 25, 10), "q", 1, 2, 3, 4, "HEADLINE", date(2026, 8, 25), "SEARCH", 20, 2, 200, 2.0, 4.0, 2.0, 4.0),
             ("run-b", datetime(2026, 8, 25, 10), "q", 1, 2, 3, 4, "LONG_HEADLINE", date(2026, 8, 25), "SEARCH", 30, 3, 300, 3.0, 6.0, 3.0, 6.0),
@@ -542,6 +561,55 @@ def test_rendered_int_keeps_unparseable_conversion_action_resources_distinct(
     }
     assert {row["action_conversions"] for row in result} == {2.0, 3.0}
     assert all(row["network_conversions"] is None for row in result)
+
+
+def test_campaign_truth_insert_source_rebuilds_every_click_day_in_window(
+    production_manifest: Manifest,
+    render_inputs: tuple[SimpleNamespace, RunContext],
+) -> None:
+    config, ctx = render_inputs
+    connection = duckdb.connect()
+    columns = [
+        ("date", "DATE"),
+        ("account_id", "BIGINT"),
+        ("campaign_id", "BIGINT"),
+        ("campaign_name", "VARCHAR"),
+        ("campaign_status", "VARCHAR"),
+        ("ad_network_type", "VARCHAR"),
+        ("metric_basis", "VARCHAR"),
+        ("network_impressions", "BIGINT"),
+        ("network_clicks", "BIGINT"),
+        ("network_cost", "DECIMAL(20, 6)"),
+        ("network_conversions", "DOUBLE"),
+        ("network_conversions_value", "DOUBLE"),
+        ("network_all_conversions", "DOUBLE"),
+        ("network_all_conversions_value", "DOUBLE"),
+        ("currency_code", "VARCHAR"),
+        ("attribute_provenance", "VARCHAR"),
+    ]
+    rows = [
+        (
+            day, 1, 7, "Campaign", "ENABLED", "SEARCH", "NETWORK",
+            100, 10, 1.0, 2.0, 3.0, 2.5, 3.5, "EUR", "observed",
+        )
+        for day in (date(2026, 8, 24), date(2026, 8, 25))
+    ]
+    _create_table(connection, "int_performance_campaign", columns, rows)
+    query = _insert_query(
+        production_manifest,
+        config,
+        ctx,
+        "build_mart_campaign_truth",
+        "mart_campaign_truth",
+    )
+    result = _rows(
+        connection,
+        _duckdb_sql(query, as_of=date(2026, 8, 25)),
+    )
+    assert {row["date"] for row in result} == {
+        date(2026, 8, 24),
+        date(2026, 8, 25),
+    }
 
 
 def _conversion_action_entity_sources(connection: duckdb.DuckDBPyConnection) -> None:
@@ -818,7 +886,7 @@ def test_no_rendered_statement_has_where_without_from(
                     )
 
 
-def test_every_table_delete_is_exact_partition_guard(
+def test_every_table_delete_matches_its_partition_contract(
     production_manifest: Manifest,
     render_inputs: tuple[SimpleNamespace, RunContext],
 ) -> None:
@@ -832,10 +900,16 @@ def test_every_table_delete_is_exact_partition_guard(
                 continue
             delete_count += 1
             predicate = statement.args["where"].this
-            assert isinstance(predicate, exp.EQ), step.name
             assert isinstance(predicate.this, exp.Column), step.name
             assert predicate.this.name == step.partition_field, step.name
-            assert predicate.expression.sql(dialect="bigquery") == "@as_of", step.name
+            if step.partition_field == "snapshot_date":
+                assert isinstance(predicate, exp.EQ), step.name
+                assert predicate.expression.sql(dialect="bigquery") == "@as_of"
+            else:
+                assert isinstance(predicate, exp.Between), step.name
+                low = predicate.args["low"].sql(dialect="bigquery")
+                assert low == "DATE_SUB(@as_of, INTERVAL '24' DAY)", step.name
+                assert predicate.args["high"].sql(dialect="bigquery") == "@as_of"
     assert delete_count > 20
 
 
@@ -852,10 +926,13 @@ ASSERTION_GRAINS: dict[str, list[tuple[str, str]]] = {
     "mart_entities_campaign_asset": [("snapshot_date", "DATE"), ("account_id", "BIGINT"), ("campaign_id", "BIGINT"), ("asset_resource_name", "VARCHAR"), ("field_type", "VARCHAR")],
     "mart_entities_conversion_action": [("snapshot_date", "DATE"), ("account_id", "BIGINT"), ("conversion_action_id", "BIGINT")],
     "mart_entities_customer": [("snapshot_date", "DATE"), ("account_id", "BIGINT")],
+    "mart_bp_campaign": [("snapshot_date", "DATE"), ("account_id", "BIGINT"), ("campaign_id", "BIGINT")],
+    "mart_bp_asset_group": [("snapshot_date", "DATE"), ("account_id", "BIGINT"), ("campaign_id", "BIGINT"), ("asset_group_id", "BIGINT")],
+    "mart_bp_extended": [("snapshot_date", "DATE"), ("account_id", "BIGINT"), ("campaign_id", "BIGINT"), ("asset_group_id", "BIGINT")],
 }
 
 
-def test_unique_assertion_executes_rendered_sql_and_rejects_seeded_duplicate(
+def test_unique_assertion_rejects_duplicate_on_earlier_rebuilt_click_day(
     production_manifest: Manifest,
     render_inputs: tuple[SimpleNamespace, RunContext],
 ) -> None:
@@ -864,7 +941,7 @@ def test_unique_assertion_executes_rendered_sql_and_rejects_seeded_duplicate(
     for table, columns in ASSERTION_GRAINS.items():
         _create_table(connection, table, columns)
     duplicate = (
-        date(2026, 8, 25),
+        date(2026, 8, 24),
         1,
         2,
         "NETWORK",
@@ -874,6 +951,40 @@ def test_unique_assertion_executes_rendered_sql_and_rejects_seeded_duplicate(
     )
     connection.executemany(
         "INSERT INTO mart_performance_campaign VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [duplicate, duplicate],
+    )
+    rendered = render(_step(production_manifest, "assert_unique_keys"), config, ctx)
+    result = _rows(
+        connection,
+        _duckdb_sql(rendered, as_of=date(2026, 8, 25)),
+    )
+    assert result == [
+        {
+            "passed": False,
+            "observed": 1,
+            "expected": 0,
+            "detail": "duplicate published-mart grain groups",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "mart", ["mart_bp_campaign", "mart_bp_asset_group", "mart_bp_extended"]
+)
+def test_unique_assertion_rejects_seeded_score_mart_duplicate(
+    mart: str,
+    production_manifest: Manifest,
+    render_inputs: tuple[SimpleNamespace, RunContext],
+) -> None:
+    config, ctx = render_inputs
+    connection = duckdb.connect()
+    for table, columns in ASSERTION_GRAINS.items():
+        _create_table(connection, table, columns)
+    width = len(ASSERTION_GRAINS[mart])
+    duplicate = (date(2026, 8, 25), 1, 2, 3)[:width]
+    placeholders = ", ".join("?" for _ in range(width))
+    connection.executemany(
+        f"INSERT INTO {mart} VALUES ({placeholders})",
         [duplicate, duplicate],
     )
     rendered = render(_step(production_manifest, "assert_unique_keys"), config, ctx)
@@ -916,6 +1027,9 @@ def test_assertions_cover_every_mart_and_have_correct_dependencies(
         "build_mart_entities_campaign_asset",
         "build_mart_entities_conversion_action",
         "build_mart_entities_customer",
+        "mart_bp_campaign",
+        "mart_bp_asset_group",
+        "mart_bp_extended",
     }
     assert set(unique_step.depends_on) == expected_dependencies
 
@@ -926,12 +1040,121 @@ def test_assertions_cover_every_mart_and_have_correct_dependencies(
         re.IGNORECASE,
     )
     row_floor = render(_step(production_manifest, "assert_row_count_floor"), config, ctx)
-    assert "observed = expected" in row_floor
+    assert "FULL OUTER JOIN expected_by_day" in row_floor
+    assert "COUNT(*) = 0 AS passed" in row_floor
+    assert "per click day" in row_floor
     coherence = render(_step(production_manifest, "assert_family_coherence"), config, ctx)
     assert "ABS(" in coherence
     assert str(config.tolerances.campaign_reconciliation) in coherence
     assert "observed_tombstone" in coherence
     assert "!=" not in coherence
+
+
+def test_window_bound_assertions_never_narrow_a_click_day_to_as_of(
+    production_manifest: Manifest,
+    render_inputs: tuple[SimpleNamespace, RunContext],
+) -> None:
+    """All four widened assertions must inspect the complete rebuild window."""
+    config, ctx = render_inputs
+    assertion_steps = (
+        "assert_unique_keys",
+        "assert_not_null",
+        "assert_cohort_integrity",
+        "assert_row_count_floor",
+    )
+    as_of_equality = re.compile(
+        r"\b(?:date|click_date)\s*=\s*@as_of\b",
+        re.IGNORECASE,
+    )
+
+    for name in assertion_steps:
+        rendered = render(_step(production_manifest, name), config, ctx)
+        assert as_of_equality.search(rendered) is None, name
+        assert "DATE_SUB(@as_of" in rendered, name
+
+
+def test_not_null_assertion_rejects_earlier_rebuilt_click_day(
+    production_manifest: Manifest,
+    render_inputs: tuple[SimpleNamespace, RunContext],
+) -> None:
+    config, ctx = render_inputs
+    connection = duckdb.connect()
+    _create_table(
+        connection,
+        "mart_performance_campaign",
+        [
+            ("date", "DATE"),
+            ("account_id", "BIGINT"),
+            ("campaign_id", "BIGINT"),
+            ("metric_basis", "VARCHAR"),
+        ],
+        [(date(2026, 8, 24), None, 7, "NETWORK")],
+    )
+    _create_table(
+        connection,
+        "mart_performance_asset_group",
+        [
+            ("date", "DATE"),
+            ("account_id", "BIGINT"),
+            ("campaign_id", "BIGINT"),
+            ("asset_group_id", "BIGINT"),
+            ("metric_basis", "VARCHAR"),
+        ],
+    )
+    _create_table(
+        connection,
+        "mart_asset_performance",
+        [
+            ("date", "DATE"),
+            ("account_id", "BIGINT"),
+            ("campaign_id", "BIGINT"),
+            ("asset_group_id", "BIGINT"),
+            ("asset_id", "BIGINT"),
+            ("field_type", "VARCHAR"),
+            ("metric_basis", "VARCHAR"),
+        ],
+    )
+    rendered = render(_step(production_manifest, "assert_not_null"), config, ctx)
+    result = _rows(
+        connection,
+        _duckdb_sql(rendered, as_of=date(2026, 8, 25)),
+    )
+    assert result[0]["passed"] is False
+
+
+def test_row_count_floor_compares_each_rebuilt_click_day(
+    production_manifest: Manifest,
+    render_inputs: tuple[SimpleNamespace, RunContext],
+) -> None:
+    config, ctx = render_inputs
+    connection = duckdb.connect()
+    _create_table(
+        connection,
+        "mart_campaign_truth",
+        [("date", "DATE"), ("campaign_id", "BIGINT")],
+        [(date(2026, 8, 25), 7)],
+    )
+    _create_table(
+        connection,
+        "stg_volume_campaign",
+        [("date", "DATE"), ("campaign_id", "BIGINT")],
+        [(date(2026, 8, 24), 6), (date(2026, 8, 25), 7)],
+    )
+    rendered = render(
+        _step(production_manifest, "assert_row_count_floor"), config, ctx
+    )
+    result = _rows(
+        connection,
+        _duckdb_sql(rendered, as_of=date(2026, 8, 25)),
+    )
+    assert result == [
+        {
+            "passed": False,
+            "observed": 1,
+            "expected": 0,
+            "detail": "campaign truth row count must equal staged campaign-network grain per click day",
+        }
+    ]
 
 
 def test_marts_and_views_have_no_wall_clock_functions(
@@ -975,8 +1198,17 @@ def test_data_model_documents_grains_current_bounds_and_mapping_honesty() -> Non
         "campaignbpscore_",
     ):
         assert ungrounded not in doc
-    assert "02 | TODO-U4" in doc
-    assert "03 | TODO-U4" in doc
+    fork_table = doc.split("## Current fork transformation mapping", 1)[1]
+    assert "TODO-U4" not in doc
+    assert not re.search(r"\bU\d+\b", fork_table)
+    assert (
+        "| `bq_queries/02-primary_conversion_action_pmax.sql` | Pinned parity "
+        "intermediate; mapped without a separate output table |"
+    ) in fork_table
+    assert (
+        "| `bq_queries/03-primary_conversion_action_search.sql` | Pinned parity "
+        "intermediate; mapped without a separate output table |"
+    ) in fork_table
     assert "primary-action" in doc
 
 

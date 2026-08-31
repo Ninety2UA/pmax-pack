@@ -1,0 +1,8 @@
+{
+  "match": {
+    "entity_type": "campaign",
+    "campaign_id": 220000001,
+    "metric": "campaign_bp_score"
+  },
+  "delta": 0.02
+}

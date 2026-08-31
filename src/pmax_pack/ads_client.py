@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_SECRET_PATH = "/secrets/google-ads.yaml"
 RETRY_ATTEMPTS = 5
+RETRY_WAIT = tenacity.wait_exponential(multiplier=10, min=10, max=60)
 
 PROBE_QUERY = """
 SELECT
@@ -263,6 +264,8 @@ def fetch_family(
     query_text: str,
     account: str,
     macros: dict[str, str] | None,
+    *,
+    retry_wait: Any | None = None,
 ) -> Any:
     """Fetch one account with retries for quota, unavailable, and deadline only."""
     acct = _as_customer_id(account)
@@ -287,7 +290,7 @@ def fetch_family(
         try:
             return tenacity.Retrying(
                 stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS),
-                wait=tenacity.wait_exponential(multiplier=0.01, min=0.01, max=0.2),
+                wait=RETRY_WAIT if retry_wait is None else retry_wait,
                 retry=tenacity.retry_if_exception(_is_retryable),
                 reraise=True,
             )(_once)

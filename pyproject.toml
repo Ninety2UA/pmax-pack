@@ -26,6 +26,8 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "duckdb",
+    "fastavro",
+    "pandas",
     "pytest",
     "sqlglot",
     "pyyaml",

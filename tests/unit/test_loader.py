@@ -132,6 +132,7 @@ def test_raw_tables_cover_four_families():
         "entities_asset",
         "entities_asset_group_signal",
         "entities_campaign_asset",
+        "entities_customer_asset",
         "entities_conversion_action",
         "entities_customer",
     }
@@ -318,14 +319,14 @@ def test_ensure_table_skips_create_when_present():
 
 def test_load_job_count_arithmetic():
     assert FACT_TABLES == 8
-    assert ENTITY_TABLES == 8
-    assert daily_load_jobs(37) == 8 * 37 + 8
-    assert daily_load_jobs(97) == 8 * 97 + 8
+    assert ENTITY_TABLES == 9
+    assert daily_load_jobs(37) == 8 * 37 + 9
+    assert daily_load_jobs(97) == 8 * 97 + 9
     bf = backfill_load_jobs(days=1127, chunks=38)
     assert bf["per_fact_table"] == 1127
     assert bf["facts_total"] == 8 * 1127
-    assert bf["entities_total"] == 8
-    assert bf["total"] == 8 * 1127 + 8
+    assert bf["entities_total"] == 9
+    assert bf["total"] == 8 * 1127 + 9
 
 
 def test_fixture_loader_lands_through_load_rows():
@@ -726,6 +727,7 @@ def test_bind_backfill_stage_records_load_job_count_in_ledger(monkeypatch):
                 fetcher=object(),
                 bq_client=object(),
                 loaded_at_fn=lambda: NOW,
+                lease=lease,
             )
         ],
         ctx,
@@ -741,4 +743,3 @@ def test_bind_backfill_stage_records_load_job_count_in_ledger(monkeypatch):
                 if row.get("status") == "SUCCESS" and row.get("stage") == "backfill":
                     details.append(row.get("detail"))
     assert any(d and "load_jobs" in d and "4" in d for d in details)
-

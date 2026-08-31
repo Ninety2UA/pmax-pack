@@ -65,9 +65,9 @@ PARTITION BY date
 CLUSTER BY account_id, campaign_id, asset_id;
 
 BEGIN TRANSACTION;
-DELETE FROM `{{ project }}.{{ marts_dataset }}.int_performance_campaign` WHERE date = @as_of;
-DELETE FROM `{{ project }}.{{ marts_dataset }}.int_performance_asset_group` WHERE date = @as_of;
-DELETE FROM `{{ project }}.{{ marts_dataset }}.int_performance_asset` WHERE date = @as_of;
+DELETE FROM `{{ project }}.{{ marts_dataset }}.int_performance_campaign` WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of;
+DELETE FROM `{{ project }}.{{ marts_dataset }}.int_performance_asset_group` WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of;
+DELETE FROM `{{ project }}.{{ marts_dataset }}.int_performance_asset` WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of;
 
 INSERT INTO `{{ project }}.{{ marts_dataset }}.int_performance_campaign`
 WITH
@@ -88,7 +88,7 @@ performance AS (
     CAST(NULL AS FLOAT64) AS action_all_conversions_value,
     source_run_id
   FROM `{{ project }}.{{ marts_dataset }}.stg_volume_campaign`
-  WHERE date = @as_of
+  WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
   UNION ALL
   SELECT date, account_id, campaign_id, 'CONVERSION_ACTION', ad_network_type,
     SAFE_CAST(REGEXP_EXTRACT(conversion_action, r'/(\d+)$') AS INT64),
@@ -98,7 +98,7 @@ performance AS (
     CAST(NULL AS FLOAT64), CAST(NULL AS FLOAT64), conversions,
     conversions_value, all_conversions, all_conversions_value, source_run_id
   FROM `{{ project }}.{{ marts_dataset }}.stg_conv_campaign`
-  WHERE date = @as_of
+  WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
 ),
 with_entity AS (
   SELECT p.*, e.campaign_name, e.status AS campaign_status,
@@ -185,7 +185,7 @@ performance AS (
     CAST(NULL AS FLOAT64) AS action_all_conversions_value,
     source_run_id
   FROM `{{ project }}.{{ marts_dataset }}.stg_volume_asset_group`
-  WHERE date = @as_of
+  WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
   UNION ALL
   SELECT date, account_id, campaign_id, asset_group_id,
     'CONVERSION_ACTION', ad_network_type,
@@ -196,7 +196,7 @@ performance AS (
     CAST(NULL AS FLOAT64), CAST(NULL AS FLOAT64), conversions,
     conversions_value, all_conversions, all_conversions_value, source_run_id
   FROM `{{ project }}.{{ marts_dataset }}.stg_conv_asset_group`
-  WHERE date = @as_of
+  WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
 ),
 with_entity AS (
   SELECT p.*, e.asset_group_name, e.status AS asset_group_status,
@@ -287,7 +287,7 @@ performance AS (
     CAST(NULL AS FLOAT64) AS action_all_conversions_value,
     source_run_id
   FROM `{{ project }}.{{ marts_dataset }}.stg_volume_asset`
-  WHERE date = @as_of
+  WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
   UNION ALL
   SELECT date, account_id, campaign_id, asset_group_id, asset_id, field_type,
     'CONVERSION_ACTION', ad_network_type,
@@ -298,7 +298,7 @@ performance AS (
     CAST(NULL AS FLOAT64), CAST(NULL AS FLOAT64), conversions,
     conversions_value, all_conversions, all_conversions_value, source_run_id
   FROM `{{ project }}.{{ marts_dataset }}.stg_conv_asset`
-  WHERE date = @as_of
+  WHERE date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
 ),
 with_entity AS (
   SELECT p.*, e.status AS asset_status,

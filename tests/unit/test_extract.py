@@ -13,6 +13,7 @@ from pmax_pack.config import parse_config
 from pmax_pack.extract import (
     FACT_FAMILIES,
     backfill_plan,
+    checkpoint_hash_for,
     fetched_date_range,
     report_to_rows,
     run_backfill,
@@ -58,6 +59,8 @@ class FakeLedger:
     def __init__(self, pending=None):
         self.done: list[tuple] = []
         self.pending_map = pending or {}
+        self.pending_calls: list[str] = []
+        self.frozen_calls: list[str] = []
         self.errors: list[str] = []
         self.stage_events: list[tuple] = []
 
@@ -70,11 +73,13 @@ class FakeLedger:
         required_families,
     ):
         key = str(account_id)
+        self.pending_calls.append(key)
         if key in self.pending_map:
             return list(self.pending_map[key])
         return list(configured_chunks)
 
     def frozen_chunks(self, account_id, wall_start, configured_chunks):
+        self.frozen_calls.append(str(account_id))
         return []
 
     def checkpoint_done(
@@ -455,6 +460,67 @@ def test_backfill_failure_on_august_keeps_prior_checkpoints(monkeypatch):
     assert "2026-08" not in chunks_done
 
 
+def test_backfill_renews_lease_after_each_completed_chunk(monkeypatch):
+    cfg = parse_config(_valid_raw(start_date="2026-06-01"))
+    ledger = FakeLedger(pending={ACCOUNT: ["2026-06", "2026-07"]})
+
+    def fake_extract(**kwargs):
+        return None
+
+    class RecordingLease:
+        def __init__(self):
+            self.done_counts: list[int] = []
+
+        def renew(self, now):
+            self.done_counts.append(len(ledger.done))
+
+    monkeypatch.setattr("pmax_pack.extract.extract_accounts", fake_extract)
+    lease = RecordingLease()
+    run_backfill(
+        config=cfg,
+        run_date=date(2026, 8, 26),
+        ledger=ledger,
+        fetcher=object(),
+        bq_client=RecordingBQ(),
+        accounts=[ACCOUNT],
+        run_id=RUN_ID,
+        loaded_at=NOW,
+        families=FACT_FAMILIES,
+        checkpoint_hash="precomputed",
+        lease=lease,
+        now_fn=lambda: NOW,
+    )
+    assert lease.done_counts == [3, 6]
+
+
+def test_backfill_lease_renewal_failure_surfaces_after_checkpoint(monkeypatch):
+    cfg = parse_config(_valid_raw(start_date="2026-06-01"))
+    ledger = FakeLedger(pending={ACCOUNT: ["2026-06", "2026-07"]})
+    monkeypatch.setattr("pmax_pack.extract.extract_accounts", lambda **kwargs: None)
+
+    class RaisingLease:
+        def renew(self, now):
+            assert {item[1] for item in ledger.done} == {"2026-06"}
+            raise RuntimeError("lease renewal failed")
+
+    with pytest.raises(RuntimeError, match="lease renewal failed"):
+        run_backfill(
+            config=cfg,
+            run_date=date(2026, 8, 26),
+            ledger=ledger,
+            fetcher=object(),
+            bq_client=RecordingBQ(),
+            accounts=[ACCOUNT],
+            run_id=RUN_ID,
+            loaded_at=NOW,
+            families=FACT_FAMILIES,
+            checkpoint_hash="precomputed",
+            lease=RaisingLease(),
+            now_fn=lambda: NOW,
+        )
+    assert {item[1] for item in ledger.done} == {"2026-06"}
+
+
 def test_start_older_than_37_months_is_clamped_and_logged(caplog):
     cfg = parse_config(_valid_raw(start_date="2019-01-01"))
     ledger = FakeLedger(pending={ACCOUNT: []})
@@ -477,6 +543,27 @@ def test_hash_change_repulls_configured_range():
     assert "2026-06" not in plan_b.chunks
 
 
+def test_default_start_checkpoint_hash_is_stable_across_run_days():
+    default_raw = _valid_raw()
+    default_raw.pop("start_date")
+    first = parse_config(default_raw, run_date=date(2026, 8, 26))
+    second = parse_config(default_raw, run_date=date(2026, 8, 27))
+    explicit_first = parse_config(
+        _valid_raw(start_date="2026-05-28"),
+        run_date=date(2026, 8, 26),
+    )
+    explicit_second = parse_config(
+        _valid_raw(start_date="2026-05-29"),
+        run_date=date(2026, 8, 26),
+    )
+
+    assert first.start_date != second.start_date
+    assert checkpoint_hash_for(first) == checkpoint_hash_for(second)
+    assert checkpoint_hash_for(explicit_first) != checkpoint_hash_for(
+        explicit_second
+    )
+
+
 def test_zero_row_account_does_not_crash():
     from pmax_pack.extract import extract_accounts
 
@@ -493,6 +580,59 @@ def test_zero_row_account_does_not_crash():
         families=("A",),
     )
     assert staging == {} or all(not v for v in staging.values())
+
+
+def test_all_empty_success_replaces_the_fetched_fact_partition():
+    from pmax_pack.extract import extract_accounts
+    from pmax_pack.loader import load_rows
+    from pmax_pack.schema import RAW_TABLES
+
+    day = date(2026, 8, 20)
+    spec = RAW_TABLES["volume_campaign"]
+    client = RecordingBQ()
+    stale = report_to_rows(
+        FakeReport([_volume_row(ACCOUNT, day.isoformat(), 7)]),
+        "run-stale",
+        NOW,
+        QUERY_HASH,
+    )
+    load_rows(
+        client,
+        "example-project.pmax_raw.volume_campaign",
+        stale,
+        spec.fields,
+        day,
+        "WRITE_TRUNCATE",
+        partition_field="date",
+    )
+    staging: dict = {}
+    extract_accounts(
+        fetcher=FakeFetcher(by_account={ACCOUNT: []}),
+        accounts=[ACCOUNT],
+        window_start=day,
+        window_end=day,
+        run_id=RUN_ID,
+        loaded_at=NOW,
+        staging=staging,
+        families=("A",),
+    )
+    flush_staged(
+        client,
+        staging,
+        project="example-project",
+        dataset="pmax_raw",
+        window_start=day,
+        specs={"volume_campaign": spec},
+    )
+
+    replacements = [
+        load
+        for load in client.loads
+        if load["destination"].endswith("volume_campaign$20260820")
+    ]
+    assert len(replacements) == 2
+    assert replacements[-1]["rows"] == []
+    assert replacements[-1]["job_config"].write_disposition == "WRITE_TRUNCATE"
 
 
 def test_empty_chunk_checkpoints_without_loads(monkeypatch):
@@ -650,6 +790,60 @@ def test_backfill_plan_includes_expanded_child_without_checkpoints():
     assert any(c in plan.pending for c in plan.pending_by_account[child])
 
 
+def test_backfill_account_scopes_plan_but_writes_resolved_union(monkeypatch):
+    cfg = parse_config(_valid_raw(accounts=[ACCOUNT, ACCOUNT_B], start_date="2026-08-01"))
+    ledger = FakeLedger(
+        pending={ACCOUNT: ["2026-08"], ACCOUNT_B: ["2026-06"]}
+    )
+
+    def fake_extract(**kwargs):
+        if tuple(kwargs["families"]) == ("D",):
+            return
+        for account in kwargs["accounts"]:
+            rows = report_to_rows(
+                FakeReport([_volume_row(account, "2026-08-01", 1)]),
+                RUN_ID,
+                NOW,
+                QUERY_HASH,
+            )
+            stage_rows(
+                kwargs["staging"],
+                "volume_campaign",
+                date(2026, 8, 1),
+                rows,
+            )
+
+    monkeypatch.setattr("pmax_pack.extract.extract_accounts", fake_extract)
+    client = RecordingBQ()
+    run_backfill(
+        config=cfg,
+        run_date=date(2026, 8, 26),
+        ledger=ledger,
+        fetcher=object(),
+        bq_client=client,
+        accounts=[ACCOUNT, ACCOUNT_B],
+        plan_accounts=[ACCOUNT],
+        run_id=RUN_ID,
+        loaded_at=NOW,
+        families=("A",),
+        checkpoint_hash="precomputed",
+    )
+    assert ledger.pending_calls == [ACCOUNT]
+    partition = next(
+        load
+        for load in client.loads
+        if load["destination"].endswith("volume_campaign$20260801")
+    )
+    assert {row["account_id"] for row in partition["rows"]} == {
+        int(ACCOUNT),
+        int(ACCOUNT_B),
+    }
+    assert {(item[0], item[1]) for item in ledger.done} == {
+        (ACCOUNT, "2026-08"),
+        (ACCOUNT_B, "2026-08"),
+    }
+
+
 def test_backfill_plan_no_query_file_reads_when_hash_passed(monkeypatch):
     reads: list[str] = []
     monkeypatch.setattr(
@@ -740,6 +934,14 @@ def test_flush_failure_writes_no_checkpoint(monkeypatch):
         def load_table_from_file(self, file_obj, destination, job_config=None, **kwargs):
             raise RuntimeError("load failed")
 
+    class RecordingLease:
+        def __init__(self):
+            self.renewals = 0
+
+        def renew(self, now):
+            self.renewals += 1
+
+    lease = RecordingLease()
     with pytest.raises(RuntimeError, match="load failed"):
         run_backfill(
             config=cfg,
@@ -752,8 +954,11 @@ def test_flush_failure_writes_no_checkpoint(monkeypatch):
             loaded_at=NOW,
             families=("A",),
             checkpoint_hash="precomputed",
+            lease=lease,
+            now_fn=lambda: NOW,
         )
     assert ledger.done == []
+    assert lease.renewals == 0
 
 
 def test_empty_entity_table_stages_empty_snapshot_key():
@@ -976,4 +1181,3 @@ FROM campaign
     assert isinstance(landed[0], dict)
     assert landed[0]["asset_automation_type"] == "TEXT_ASSET_AUTOMATION"
     assert [["Not set"]] != [landed]
-

@@ -4,13 +4,18 @@ IMAGE ?= pmax-pack
 TERMS ?= deployments/scrub-terms.txt
 TARGET ?= /tmp/pmax-pack-publish.git
 
-.PHONY: sync test image scrub publish-dry-run
+.PHONY: sync test deploy-test image scrub publish-dry-run
 
 sync:
 	$(UV) sync --locked --python $(PYTHON)
 
 test:
 	$(UV) run pytest -q
+
+deploy-test:
+	bash deploy/tests/test_deploy_plan.sh </dev/null
+	bash deploy/tests/test_deploy_review.sh </dev/null
+	bash deploy/tests/test_deploy_first_run.sh </dev/null
 
 image:
 	docker buildx build --platform linux/amd64 -t $(IMAGE) --load .

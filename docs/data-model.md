@@ -9,8 +9,10 @@ partition and enforce a maximum bytes billed cap.
 
 ## Contract rules
 
-- A table step replaces only the `@as_of` partition inside a transaction.
-  Re-running a day does not delete any other day.
+- A click-keyed table step replaces the inclusive window from
+  `@as_of - window_days` through `@as_of` inside one transaction. Entity
+  snapshot steps replace only the `snapshot_date = @as_of` partition. Views
+  and DDL remain unparameterized.
 - Raw and staging money remains `INT64` micros. Published `network_cost` and
   `budget_amount` are `NUMERIC` currency amounts derived by dividing micros by
   1,000,000. `currency_code` states the account currency.
@@ -83,9 +85,10 @@ states its complete clustering list. The physical DDL is authoritative.
 
 ## Staging tables
 
-Each staging table selects the latest `(loaded_at, run_id)` for its stated key
-inside one partition. Staging retains raw metric types, except campaign start
-and end strings become nullable `DATETIME` through safe parsing.
+Each click-keyed staging table selects the latest `(loaded_at, run_id)` for its
+stated key inside the effective re-pull window. Entity staging selects the
+single `@as_of` snapshot. Staging retains raw metric types, except campaign
+start and end strings become nullable `DATETIME` through safe parsing.
 
 | Table | Grain and columns |
 |---|---|
@@ -160,25 +163,26 @@ later view exposes a coarser grouping.
 
 ## Current fork transformation mapping
 
-The source names below come from the pinned current fork. U4 owns the score
-marts named in this table. Entries marked dropped are deliberate removals, not
-missing work.
+The current pin contains BigQuery files 01 to 05, 07, 09, and 10 plus its
+named GAQL inputs. A row outside that pin is recorded for migration context,
+not claimed as a shipped reference file. Entries marked dropped are deliberate
+removals, not missing work.
 
-| Fork query | Published table | v2 mapping |
+| Upstream query | Scope or disposition | v2 mapping |
 |---|---|---|
-| 01 `image_assets` | `image_assets` | `mart_entities_asset` image type, URL, dimensions, orientation. |
-| 02 | TODO-U4 | TODO-U4 primary-action rule: verify against `reference/` at U4 and document how pMax primary selection derives from action settings. |
-| 03 | TODO-U4 | TODO-U4 primary-action rule: verify against `reference/` at U4 and document how Search primary selection derives from action settings. |
-| 04 `text_assets` | `text_assets` | `mart_entities_asset` text and field-type rows. |
-| 05 `video_assets` | `video_assets` | `mart_entities_asset` video ID/title and orientation rows. |
-| 06 | TODO-U4 | TODO-U4 (verify against `reference/` at U4); do not claim a dropped table name before the reference lands. |
-| 07 `campaign_data` | `campaign_data` | `mart_entities_campaign`, `mart_entities_asset_group_signal`, `mart_entities_campaign_asset`, and `mart_entities_customer`. |
-| 08 | TODO-U4 | TODO-U4 (verify against `reference/` at U4); a daily asset fact is not asserted as a summary replacement. |
-| 09 `bpscore` | U4 score mart | U4 `mart_bp_campaign`; it consumes the entity marts and keeps nullable URL expansion behavior explicit. |
-| 10 `assetgroupbestpractices` | `assetgroupbestpractices` | U4 `mart_bp_asset_group`. |
-| 11 | TODO-U4 | TODO-U4 (verify against `reference/` at U4). |
-| 12 `campaign_settings` | `campaign_settings` | `mart_entities_campaign` for settings and U4 `mart_bp_campaign` for scores. |
-| 13 | TODO-U4 | TODO-U4 (verify against `reference/` at U4) before classifying any Looker-only drop. |
-| 14 | TODO-U4 | TODO-U4 (verify against `reference/` at U4) before classifying any Looker-only drop. |
-| 19 `assetgroupperformance` | `assetgroup_performance` | Additive metrics map to `mart_performance_asset_group`. **Dropped subfield: constant performance label** and its low-asset count. |
-| 20 | TODO-U4 | TODO-U4 (verify against `reference/` at U4) before classifying any Looker-only drop. |
+| `bq_queries/01-image_assets.sql` | Pinned; mapped | `mart_entities_asset` image type, URL, dimensions, and orientation. |
+| `bq_queries/02-primary_conversion_action_pmax.sql` | Pinned parity intermediate; mapped without a separate output table | Named actions and lookback windows remain in `mart_entities_conversion_action`; primary-action membership is evidence-based rather than a frequency-selected display table. |
+| `bq_queries/03-primary_conversion_action_search.sql` | Pinned parity intermediate; mapped without a separate output table | Named actions and lookback windows remain in `mart_entities_conversion_action`; no Search-only frequency table is published. |
+| `bq_queries/04-text_assets.sql` | Pinned; mapped | `mart_entities_asset` text and field-type rows. |
+| `bq_queries/05-video_assets.sql` | Pinned; mapped | `mart_entities_asset` video ID, title, and orientation rows. |
+| Upstream 06 | Outside the current pin | No file-level mapping claim. |
+| `bq_queries/07-campaign_data.sql` | Pinned; mapped | `mart_entities_campaign`, `mart_entities_asset_group_signal`, `mart_entities_campaign_asset`, and `mart_entities_customer`. |
+| Upstream 08 | Outside the current pin | No summary replacement is claimed for the daily asset fact. |
+| `bq_queries/09-bpscore.sql` | Pinned; mapped | `mart_bp_campaign`; it consumes the entity marts and keeps nullable URL expansion behavior explicit. |
+| `bq_queries/10-assetgroupbestpractices.sql` | Pinned; mapped | `mart_bp_asset_group`. |
+| Upstream 11 | Outside the current pin | No file-level mapping claim. |
+| `google_ads_queries/campaign_settings.sql` | Pinned, unnumbered GAQL input; mapped | `mart_entities_campaign` for settings and `mart_bp_campaign` for scores. |
+| Upstream 13 | Outside the current pin | No Looker-only output is classified without a pinned file. |
+| Upstream 14 | Outside the current pin | No Looker-only output is classified without a pinned file. |
+| `assetgroupperformance` | Outside the current pin; legacy mapping retained | Additive metrics map to `mart_performance_asset_group`. **Dropped subfield: constant performance label** and its low-asset count. |
+| Upstream 20 | Outside the current pin | No Looker-only output is classified without a pinned file. |
