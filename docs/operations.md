@@ -22,12 +22,13 @@ operator-owned. The alert phase is agent-safe but still refuses without both
 operator confirmations.
 
 The runtime identity can write only the raw, mart, ops, and verification
-datasets. Trusted CI uses direct WIF, without service-account impersonation,
-and can write only the fixed CI scratch pair while carrying no Google Ads
-credential. A concurrency group serializes that pair. Pull-request CI is
-fixture-only and credential-free. Both CI paths lint SQL template dataset
-references under `src/pmax_pack/sql`; Python-embedded SQL is outside this
-lint's scope. Real-data parity is run locally by the named operator and
+datasets. Public CI is fixture-only and credential-free: it never requests
+an OIDC token or federates to Google Cloud. Public CI lints SQL template
+dataset references under `src/pmax_pack/sql`; Python-embedded SQL is outside
+this lint's scope. It also renders every manifest step before parsing it. The Workload
+Identity Federation pool that phase 45 provisions is retained for the fixed
+CI scratch pair but has no workflow bound to it; remove it with the
+decommission checklist when it is no longer wanted. Real-data parity is run locally by the named operator and
 verified through its ledger row.
 
 Reports are written to `reports/<deployment>/<run_id>.md` with a `latest.md`

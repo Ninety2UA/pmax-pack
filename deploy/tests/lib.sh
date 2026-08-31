@@ -5,9 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DEPLOY="$ROOT/deploy/deploy.sh"
 PHASES="${PHASES:-$ROOT/deploy/phases}"
-WORKFLOW="$ROOT/.github/workflows/trusted.yml"
 PR_WORKFLOW="$ROOT/.github/workflows/pr.yml"
-export ROOT DEPLOY PHASES WORKFLOW PR_WORKFLOW
+export ROOT DEPLOY PHASES PR_WORKFLOW
 
 fail() {
   echo "FAIL: $*" >&2
