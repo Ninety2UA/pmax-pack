@@ -39,7 +39,19 @@ TEXT_SUFFIXES = {
     ".lock",
 }
 
-SKIP_DIR_NAMES = {
+# Workspace record folders (never published: scripts/publish-exclude.txt)
+# legitimately discuss credential key names; skip only when they are the
+# first path component under the scan root. Nested names (docs/plans/)
+# stay in scope. The repo-level check_secrets.py guard still covers the
+# root record folders before every push.
+RECORD_DIRS = {
+    "plans",
+    "learnings",
+}
+
+# Cache and venv names stay depth-agnostic under the scan root; ancestors
+# of the scan root are never inspected.
+CACHE_DIR_NAMES = {
     ".git",
     ".venv",
     "venv",
@@ -105,7 +117,10 @@ def _iter_files(root: Path) -> list[Path]:
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if any(part in SKIP_DIR_NAMES for part in path.parts):
+        rel = path.relative_to(root)
+        if len(rel.parts) > 1 and rel.parts[0] in RECORD_DIRS:
+            continue
+        if any(part in CACHE_DIR_NAMES for part in rel.parts):
             continue
         files.append(path)
     return sorted(files)
@@ -164,7 +179,21 @@ def _scan_file(path: Path, terms: list[str]) -> list[tuple[str, int, str]]:
         for pat, label in _CONTENT_PATTERNS:
             if pat.search(line):
                 hits.append((loc, lineno, label))
-        if ASSIGNMENT_RE.search(line):
+        # GitHub's OIDC permission is declarative workflow metadata, not a
+        # credential value. Keep this exception path-, key-, and value-scoped
+        # so actual token assignments remain blocking hits.
+        permission_parts = line.partition(":")
+        workflow_path = path.as_posix()
+        oidc_permission = (
+            (
+                workflow_path == ".github/workflows/trusted.yml"
+                or workflow_path.endswith("/.github/workflows/trusted.yml")
+            )
+            and permission_parts[0].strip() == "id-token"
+            and permission_parts[1] == ":"
+            and permission_parts[2].split("#", 1)[0].strip() in {"none", "write"}
+        )
+        if ASSIGNMENT_RE.search(line) and not oidc_permission:
             hits.append((loc, lineno, "credential_assignment"))
         folded = line.casefold()
         for term in terms:

@@ -9,8 +9,10 @@ partition and enforce a maximum bytes billed cap.
 
 ## Contract rules
 
-- A table step replaces only the `@as_of` partition inside a transaction.
-  Re-running a day does not delete any other day.
+- A click-keyed table step replaces the inclusive window from
+  `@as_of - window_days` through `@as_of` inside one transaction. Entity
+  snapshot steps replace only the `snapshot_date = @as_of` partition. Views
+  and DDL remain unparameterized.
 - Raw and staging money remains `INT64` micros. Published `network_cost` and
   `budget_amount` are `NUMERIC` currency amounts derived by dividing micros by
   1,000,000. `currency_code` states the account currency.
@@ -83,9 +85,10 @@ states its complete clustering list. The physical DDL is authoritative.
 
 ## Staging tables
 
-Each staging table selects the latest `(loaded_at, run_id)` for its stated key
-inside one partition. Staging retains raw metric types, except campaign start
-and end strings become nullable `DATETIME` through safe parsing.
+Each click-keyed staging table selects the latest `(loaded_at, run_id)` for its
+stated key inside the effective re-pull window. Entity staging selects the
+single `@as_of` snapshot. Staging retains raw metric types, except campaign
+start and end strings become nullable `DATETIME` through safe parsing.
 
 | Table | Grain and columns |
 |---|---|
@@ -167,18 +170,18 @@ missing work.
 | Fork query | Published table | v2 mapping |
 |---|---|---|
 | 01 `image_assets` | `image_assets` | `mart_entities_asset` image type, URL, dimensions, orientation. |
-| 02 | TODO-U4 | TODO-U4 primary-action rule: verify against `reference/` at U4 and document how pMax primary selection derives from action settings. |
-| 03 | TODO-U4 | TODO-U4 primary-action rule: verify against `reference/` at U4 and document how Search primary selection derives from action settings. |
+| 02 | TODO-U4 | TODO-U4 primary-action rule: verify against `src/pmax_pack/reference/pmaximizer/` at U4 and document how pMax primary selection derives from action settings. |
+| 03 | TODO-U4 | TODO-U4 primary-action rule: verify against `src/pmax_pack/reference/pmaximizer/` at U4 and document how Search primary selection derives from action settings. |
 | 04 `text_assets` | `text_assets` | `mart_entities_asset` text and field-type rows. |
 | 05 `video_assets` | `video_assets` | `mart_entities_asset` video ID/title and orientation rows. |
-| 06 | TODO-U4 | TODO-U4 (verify against `reference/` at U4); do not claim a dropped table name before the reference lands. |
+| 06 | TODO-U4 | TODO-U4 (verify against `src/pmax_pack/reference/pmaximizer/` at U4); do not claim a dropped table name before the reference lands. |
 | 07 `campaign_data` | `campaign_data` | `mart_entities_campaign`, `mart_entities_asset_group_signal`, `mart_entities_campaign_asset`, and `mart_entities_customer`. |
-| 08 | TODO-U4 | TODO-U4 (verify against `reference/` at U4); a daily asset fact is not asserted as a summary replacement. |
+| 08 | TODO-U4 | TODO-U4 (verify against `src/pmax_pack/reference/pmaximizer/` at U4); a daily asset fact is not asserted as a summary replacement. |
 | 09 `bpscore` | U4 score mart | U4 `mart_bp_campaign`; it consumes the entity marts and keeps nullable URL expansion behavior explicit. |
 | 10 `assetgroupbestpractices` | `assetgroupbestpractices` | U4 `mart_bp_asset_group`. |
-| 11 | TODO-U4 | TODO-U4 (verify against `reference/` at U4). |
+| 11 | TODO-U4 | TODO-U4 (verify against `src/pmax_pack/reference/pmaximizer/` at U4). |
 | 12 `campaign_settings` | `campaign_settings` | `mart_entities_campaign` for settings and U4 `mart_bp_campaign` for scores. |
-| 13 | TODO-U4 | TODO-U4 (verify against `reference/` at U4) before classifying any Looker-only drop. |
-| 14 | TODO-U4 | TODO-U4 (verify against `reference/` at U4) before classifying any Looker-only drop. |
+| 13 | TODO-U4 | TODO-U4 (verify against `src/pmax_pack/reference/pmaximizer/` at U4) before classifying any Looker-only drop. |
+| 14 | TODO-U4 | TODO-U4 (verify against `src/pmax_pack/reference/pmaximizer/` at U4) before classifying any Looker-only drop. |
 | 19 `assetgroupperformance` | `assetgroup_performance` | Additive metrics map to `mart_performance_asset_group`. **Dropped subfield: constant performance label** and its low-asset count. |
-| 20 | TODO-U4 | TODO-U4 (verify against `reference/` at U4) before classifying any Looker-only drop. |
+| 20 | TODO-U4 | TODO-U4 (verify against `src/pmax_pack/reference/pmaximizer/` at U4) before classifying any Looker-only drop. |

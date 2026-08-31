@@ -9,8 +9,10 @@ import io
 import logging
 import traceback
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+import tenacity
 from google.api_core.exceptions import (
     DeadlineExceeded,
     ResourceExhausted,
@@ -189,7 +191,13 @@ def test_fetch_quota_error_is_retried_then_succeeds():
         fail_times=2,
         fail_exc=ResourceExhausted("RESOURCE_EXHAUSTED"),
     )
-    report = fetch_family(fetcher, "SELECT customer.id FROM customer", ACCOUNT, {})
+    report = fetch_family(
+        fetcher,
+        "SELECT customer.id FROM customer",
+        ACCOUNT,
+        {},
+        retry_wait=tenacity.wait_none(),
+    )
     rows = report.to_list(row_type="dict")
     assert len(rows) == 1
     assert fetcher.calls[0][0] == "fetch"
@@ -206,7 +214,13 @@ def test_fetch_unavailable_and_deadline_are_retried():
             fail_times=1,
             fail_exc=exc,
         )
-        fetch_family(fetcher, "SELECT customer.id FROM customer", ACCOUNT, {})
+        fetch_family(
+            fetcher,
+            "SELECT customer.id FROM customer",
+            ACCOUNT,
+            {},
+            retry_wait=tenacity.wait_none(),
+        )
         assert sum(1 for c in fetcher.calls if c[0] == "fetch") == 2
 
 
@@ -216,9 +230,18 @@ def test_fetch_retry_exhaustion_raises_account_extraction_error():
         fail_exc=ResourceExhausted("quota"),
     )
     with pytest.raises(AccountExtractionError) as exc:
-        fetch_family(fetcher, "SELECT customer.id FROM customer", ACCOUNT, {})
+        fetch_family(
+            fetcher,
+            "SELECT customer.id FROM customer",
+            ACCOUNT,
+            {},
+            retry_wait=tenacity.wait_none(),
+        )
     assert ACCOUNT in str(exc.value)
     assert exc.value.account == ACCOUNT
+    # reraise=True: the original quota error is the cause, never tenacity's RetryError
+    assert isinstance(exc.value.__cause__, ResourceExhausted)
+    assert "quota" in str(exc.value.__cause__)
     assert sum(1 for c in fetcher.calls if c[0] == "fetch") == 5
 
 
@@ -227,6 +250,48 @@ def test_fetch_non_retryable_error_is_not_retried():
     with pytest.raises(AccountExtractionError):
         fetch_family(fetcher, "SELECT bogus FROM campaign", ACCOUNT, {})
     assert sum(1 for c in fetcher.calls if c[0] == "fetch") == 1
+
+
+def test_production_retry_policy_spans_real_quota_window():
+    import pmax_pack.ads_client as ads_client
+
+    wait = ads_client.RETRY_WAIT
+    assert wait.multiplier == 10
+    assert wait.min >= 10
+    assert wait.max >= 60
+
+
+def test_production_retry_policy_accumulates_two_minute_window():
+    import pmax_pack.ads_client as ads_client
+
+    waits = [
+        ads_client.RETRY_WAIT(SimpleNamespace(attempt_number=attempt))
+        for attempt in range(1, ads_client.RETRY_ATTEMPTS)
+    ]
+    assert waits == [10, 20, 40, 60]
+    assert sum(waits) >= 120
+
+
+def test_fetch_without_override_reads_production_wait_at_call_time(monkeypatch):
+    import pmax_pack.ads_client as ads_client
+
+    class RecordingWait:
+        def __init__(self):
+            self.attempts: list[int] = []
+
+        def __call__(self, retry_state):
+            self.attempts.append(retry_state.attempt_number)
+            return 0
+
+    wait = RecordingWait()
+    monkeypatch.setattr(ads_client, "RETRY_WAIT", wait)
+    fetcher = FakeFetcher(
+        rows=[{"account_id": int(ACCOUNT)}],
+        fail_times=2,
+        fail_exc=ResourceExhausted("quota"),
+    )
+    fetch_family(fetcher, "SELECT customer.id FROM customer", ACCOUNT, {})
+    assert wait.attempts == [1, 2]
 
 
 def test_fetch_one_account_per_call():

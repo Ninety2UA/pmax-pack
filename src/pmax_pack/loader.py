@@ -21,7 +21,7 @@ from pmax_pack.schema import RAW_TABLES, TableSpec
 log = logging.getLogger(__name__)
 
 FACT_TABLES = 8
-ENTITY_TABLES = 8
+ENTITY_TABLES = 9
 
 _FACT_NAMES = {
     "volume_campaign",
@@ -178,12 +178,11 @@ def flush_staged(
     specs: Mapping[str, TableSpec] | None = None,
     write_disposition: str = "WRITE_TRUNCATE",
 ) -> int:
-    """Write every (table, day) once. Fact replace range is fetched-max bounded.
+    """Write every (table, day) once. Fact replace range is fetch-bound.
 
-    A fact day inside [window_start, max_fetched] with no rows gets an
-    empty-payload load. Days after max_fetched are left untouched (KTD1
-    trailing-day edge). Entity tables (partition snapshot_date) write only
-    the snapshot days present in staging, never empty-filling the fact window.
+    A fact day inside [window_start, fetched_closed_date] with no rows gets an
+    empty-payload load. Entity tables (partition snapshot_date) write only the
+    snapshot days present in staging, never empty-filling the fact window.
     """
     table_specs = specs if specs is not None else RAW_TABLES
     grouped: dict[str, dict[date, list[dict[str, Any]]]] = {}
@@ -215,8 +214,8 @@ def flush_staged(
                 )
             continue
         _lo, max_d = fetched_date_range(all_rows)
-        if max_d is None:
-            continue
+        staged_bound = max(by_day)
+        max_d = max(max_d, staged_bound) if max_d is not None else staged_bound
         for day in _daterange(window_start, max_d):
             rows = by_day.get(day, [])
             load_jobs += load_rows(

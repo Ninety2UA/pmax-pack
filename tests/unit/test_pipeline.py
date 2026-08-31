@@ -12,6 +12,7 @@ from pmax_pack.pipeline import (
     RunContext,
     Stage,
     compute_checkpoint_hash,
+    run_mode,
     run_stages,
     stages_for_mode,
 )
@@ -226,6 +227,14 @@ def test_stages_by_mode_literal_ordered_lists_match_packet_table():
         "validate",
         "report",
     )
+    assert STAGES_BY_MODE["backfill"] == (
+        "backfill",
+        "score",
+        "lag",
+        "cohort",
+        "validate",
+        "report",
+    )
     assert STAGES_BY_MODE["parity"] == ("parity",)
     assert STAGES_BY_MODE["probe"] == ()
     assert STAGES_BY_MODE["report"] == ()
@@ -250,6 +259,103 @@ def test_stages_by_mode_literal_ordered_lists_match_packet_table():
     assert list(stages_for_mode("parity")) == ["parity"]
     assert list(stages_for_mode("probe")) == []
     assert list(stages_for_mode("report")) == []
+
+
+@pytest.mark.parametrize(
+    (
+        "mode",
+        "has_pending_backfill",
+        "expected_lease_mode",
+        "timeout_hours",
+        "budget_hours",
+    ),
+    [
+        ("run", True, "first_run", 24, 25),
+        ("run", False, "run", 6, 7),
+        ("backfill", True, "first_run", 24, 25),
+        ("backfill", False, "run", 6, 7),
+        ("rebuild", True, "rebuild", 6, 7),
+        ("parity", True, "parity", 1, 2),
+    ],
+)
+def test_run_mode_lease_budget_pairs_with_the_governing_timeout(
+    bq_client,
+    storage_client,
+    mode,
+    has_pending_backfill,
+    expected_lease_mode,
+    timeout_hours,
+    budget_hours,
+):
+    ledger, lease = _harness(bq_client, storage_client)
+    registry = {
+        name: Stage(name, lambda ctx: None) for name in stages_for_mode(mode)
+    }
+    assert run_mode(
+        mode,
+        registry,
+        _ctx(mode=mode),
+        ledger,
+        lease,
+        now_fn=lambda: NOW,
+        has_pending_backfill=has_pending_backfill,
+    ) == "SUCCESS"
+    acquired = next(
+        row
+        for table, row in _events(bq_client)
+        if table == "lease_events" and row["event"] == "ACQUIRED"
+    )
+    assert acquired["mode"] == expected_lease_mode
+    assert datetime.fromisoformat(acquired["expires_at"]) - NOW == timedelta(
+        hours=budget_hours
+    )
+    assert budget_hours == timeout_hours + 1
+
+
+def test_bound_backfill_requires_live_lease():
+    from pmax_pack.pipeline import bind_backfill_stage
+
+    with pytest.raises(TypeError, match="lease"):
+        bind_backfill_stage(
+            config=object(),
+            ledger=object(),
+            fetcher=object(),
+            bq_client=object(),
+            loaded_at_fn=lambda: NOW,
+        )
+
+
+def test_bound_backfill_preserves_resolved_union_and_reports_plan_accounts(
+    monkeypatch,
+):
+    from pmax_pack.pipeline import bind_backfill_stage
+
+    account_a = "1234567890"
+    account_b = "2345678901"
+    captured: dict = {}
+
+    def fake_run_backfill(**kwargs):
+        captured.update(kwargs)
+        return 4
+
+    monkeypatch.setattr("pmax_pack.extract.run_backfill", fake_run_backfill)
+    lease = object()
+    stage = bind_backfill_stage(
+        config=object(),
+        ledger=object(),
+        fetcher=object(),
+        bq_client=object(),
+        loaded_at_fn=lambda: NOW,
+        plan_accounts=[account_a],
+        lease=lease,
+    )
+    result = stage.fn(
+        _ctx(accounts_resolved=[account_a, account_b])
+    )
+    assert captured["accounts"] == [account_a, account_b]
+    assert captured["plan_accounts"] == [account_a]
+    assert captured["lease"] is lease
+    assert result == {"load_jobs": 4, "plan_accounts": [account_a]}
 
 
 def test_probe_and_report_write_no_ledger_events(bq_client, storage_client):
@@ -346,6 +452,40 @@ def test_failure_event_insert_failure_still_raises_stage_exception(
             now_fn=lambda: NOW,
         )
     assert "lease.json" not in storage_store
+
+
+def test_no_lease_mode_keeps_guarded_failure_event_writes() -> None:
+    class NoLease:
+        generation = None
+
+        def acquire(self, *args):
+            raise AssertionError("no-lease mode touched lease acquire")
+
+    class FlakyLedger:
+        def run_started(self, **kwargs):
+            return None
+
+        def stage_started(self, *args, **kwargs):
+            return None
+
+        def stage_finished(self, *args, **kwargs):
+            raise RuntimeError("failure-event insert failed")
+
+        def run_exited(self, *args, **kwargs):
+            raise RuntimeError("failure-event insert failed")
+
+    def explode(ctx: RunContext) -> None:
+        raise ValueError("stage boom")
+
+    with pytest.raises(ValueError, match="stage boom"):
+        run_stages(
+            [Stage("score", explode)],
+            _ctx(mode="rebuild"),
+            FlakyLedger(),
+            NoLease(),
+            now_fn=lambda: NOW,
+            acquire_lease=False,
+        )
 
 
 def test_stolen_lease_at_success_exit_does_not_flip_exit(

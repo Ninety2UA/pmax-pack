@@ -70,6 +70,9 @@ JOINABLE: dict[str, frozenset[str]] = {
             "segments",
         }
     ),
+    "customer_asset": frozenset(
+        {"customer_asset", "asset", "customer", "metrics", "segments"}
+    ),
     "conversion_action": frozenset(
         {"conversion_action", "customer", "metrics", "segments"}
     ),

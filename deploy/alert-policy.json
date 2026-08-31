@@ -1,0 +1,28 @@
+{
+  "displayName": "pMax pack failed job",
+  "documentation": {
+    "content": "Cloud Run Job pmax-pack-daily completed with result=failed. Check the execution logs and RUNBOOK.md before retrying.",
+    "mimeType": "text/markdown"
+  },
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": ["NOTIFICATION_CHANNEL_ID"],
+  "conditions": [
+    {
+      "displayName": "pmax-pack-daily failed execution",
+      "conditionThreshold": {
+        "filter": "resource.type=\"cloud_run_job\" AND resource.label.\"job_name\"=\"pmax-pack-daily\" AND resource.label.\"location\"=\"REGION_ID\" AND metric.type=\"run.googleapis.com/job/completed_execution_count\" AND metric.label.\"result\"=\"failed\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "0s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_DELTA"
+          }
+        ]
+      }
+    }
+  ],
+  "userLabels": {"app": "pmax", "project": "PROJECT_ID"}
+}

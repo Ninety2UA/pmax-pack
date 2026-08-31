@@ -65,6 +65,15 @@ CREATE TABLE IF NOT EXISTS `{{ project }}.{{ marts_dataset }}.stg_entities_campa
 PARTITION BY snapshot_date
 CLUSTER BY account_id, campaign_id, asset_id;
 
+CREATE TABLE IF NOT EXISTS `{{ project }}.{{ marts_dataset }}.stg_entities_customer_asset` (
+  source_run_id STRING, loaded_at TIMESTAMP, query_hash STRING,
+  account_id INT64, asset_id INT64, snapshot_date DATE,
+  asset_resource_name STRING, field_type STRING, status STRING,
+  primary_status STRING, primary_status_reasons ARRAY<STRING>
+)
+PARTITION BY snapshot_date
+CLUSTER BY account_id, asset_id, field_type;
+
 CREATE TABLE IF NOT EXISTS `{{ project }}.{{ marts_dataset }}.stg_entities_conversion_action` (
   source_run_id STRING, loaded_at TIMESTAMP, query_hash STRING,
   account_id INT64, conversion_action_id INT64, snapshot_date DATE,
@@ -91,6 +100,7 @@ DELETE FROM `{{ project }}.{{ marts_dataset }}.stg_entities_asset_group_asset` W
 DELETE FROM `{{ project }}.{{ marts_dataset }}.stg_entities_asset` WHERE snapshot_date = @as_of;
 DELETE FROM `{{ project }}.{{ marts_dataset }}.stg_entities_asset_group_signal` WHERE snapshot_date = @as_of;
 DELETE FROM `{{ project }}.{{ marts_dataset }}.stg_entities_campaign_asset` WHERE snapshot_date = @as_of;
+DELETE FROM `{{ project }}.{{ marts_dataset }}.stg_entities_customer_asset` WHERE snapshot_date = @as_of;
 DELETE FROM `{{ project }}.{{ marts_dataset }}.stg_entities_conversion_action` WHERE snapshot_date = @as_of;
 DELETE FROM `{{ project }}.{{ marts_dataset }}.stg_entities_customer` WHERE snapshot_date = @as_of;
 
@@ -168,6 +178,18 @@ FROM `{{ project }}.{{ raw_dataset }}.entities_campaign_asset`
 WHERE snapshot_date = @as_of
 QUALIFY ROW_NUMBER() OVER (
   PARTITION BY snapshot_date, account_id, campaign_id, asset_resource_name, field_type
+  ORDER BY loaded_at DESC, run_id DESC
+) = 1;
+
+INSERT INTO `{{ project }}.{{ marts_dataset }}.stg_entities_customer_asset`
+SELECT
+  run_id, loaded_at, query_hash, account_id, asset_id, snapshot_date,
+  asset_resource_name, field_type, status, primary_status,
+  primary_status_reasons
+FROM `{{ project }}.{{ raw_dataset }}.entities_customer_asset`
+WHERE snapshot_date = @as_of
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY snapshot_date, account_id, asset_resource_name, field_type
   ORDER BY loaded_at DESC, run_id DESC
 ) = 1;
 

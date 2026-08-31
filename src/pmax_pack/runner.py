@@ -6,6 +6,8 @@ reporting. It never constructs a BigQuery client and never submits load jobs.
 """
 from __future__ import annotations
 
+from pmax_pack.labels import label_value
+
 import re
 import sys
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -332,12 +334,14 @@ def _render_context(step: Step, config: Any, ctx: Any) -> dict[str, Any]:
     try:
         ctx.as_of
         ctx.run_id
+        window_days = (ctx.as_of - ctx.window_start).days
     except AttributeError as exc:
         raise ManifestError(f"step {step.name}: run context missing field {exc}") from exc
     context: dict[str, Any] = {
         "project": project,
         "datasets": datasets,
         "cohort_days": cohort_days,
+        "window_days": window_days,
         "tolerances": tolerances,
         "as_of": "@as_of",
         "run_id": "@run_id",
@@ -553,7 +557,7 @@ def run_manifest(
         raise ManifestError("maximum_bytes_billed must be a positive integer")
 
     params = {"as_of": ctx.as_of, "run_id": ctx.run_id}
-    labels = {"app": "pmax", "run_id": ctx.run_id}
+    labels = {"app": "pmax", "run_id": label_value(ctx.run_id)}
     results: list[StepResult] = []
     hard_failures: list[AssertionResult] = []
     for step in steps:

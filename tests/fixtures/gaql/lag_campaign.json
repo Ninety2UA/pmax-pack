@@ -7,6 +7,8 @@
     "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
     "conversion_action_name": "Action 475576146142245",
     "conversion_lag_bucket": "LESS_THAN_ONE_DAY",
+    "all_conversions": 2.72947649432895,
+    "all_conversions_value": 25.514683773248116,
     "conversions": 2.52947649432895,
     "conversions_value": 23.514683773248116,
     "date": "2026-08-20"
@@ -19,6 +21,8 @@
     "conversion_action": "customers/339309795942466/conversionActions/314378426455897",
     "conversion_action_name": "Action 475576146142245",
     "conversion_lag_bucket": "ONE_TO_TWO_DAYS",
+    "all_conversions": 1.0387313499071928,
+    "all_conversions_value": 12.986700442157623,
     "conversions": 0.9387313499071928,
     "conversions_value": 11.986700442157623,
     "date": "2026-08-20"

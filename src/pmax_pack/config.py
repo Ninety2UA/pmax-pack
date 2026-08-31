@@ -21,25 +21,29 @@ DEFAULT_COHORT_DAYS = [1, 3, 7, 14, 30, 60, 90]
 DEFAULT_REGION = "europe-west1"
 DEFAULT_API_VERSION = "v25"
 DEFAULT_RESTATEMENT_MARGIN_DAYS = 7
+DEFAULT_CHECKPOINT_START_DATE = "default-90d"
 
 # Reconciliation tolerance fractions (U4 freezes parity from the pinned chain;
 # these are documented starting defaults).
 DEFAULT_TOLERANCE_CAMPAIGN = 0.01
 DEFAULT_TOLERANCE_ASSET_VS_CAMPAIGN = 0.0
 DEFAULT_TOLERANCE_CROSS_GRAIN = 0.0
-DEFAULT_TOLERANCE_PARITY = 0.0
+# Google campaign scores are rounded to two decimals in pinned query 09.
+# Freeze one displayed score unit instead of learning tolerance from live data.
+DEFAULT_TOLERANCE_PARITY = 0.01
 
 DEFAULT_DATASETS = {
     "raw": "pmax_raw",
     "marts": "pmax_marts",
     "ops": "pmax_ops",
     "snapshots": "pmax_snapshots",
+    "marts_verify": "pmax_marts_verify",
     "parity_scratch": "pmax_parity_scratch",
     "parity_scratch_bq": "pmax_parity_scratch_bq",
     "ci_scratch": "pmax_ci_scratch",
     "ci_scratch_bq": "pmax_ci_scratch_bq",
-    "marts_verify": "pmax_marts_verify",
 }
+SCRATCH_DATASET_SUFFIXES = ("_scratch", "_scratch_bq")
 
 
 def _require(d: dict[str, Any] | None, key: str, named: str) -> Any:
@@ -136,6 +140,7 @@ class Config:
     api_version: str = DEFAULT_API_VERSION
     mcc: str | None = None
     timezone_override: str | None = None
+    checkpoint_start_date: str = DEFAULT_CHECKPOINT_START_DATE
 
 
 def parse_config(
@@ -188,11 +193,13 @@ def parse_config(
     run = run_date or _utc_today()
     if raw.get("start_date") in (None, ""):
         start = run - timedelta(days=90)
+        checkpoint_start_date = DEFAULT_CHECKPOINT_START_DATE
     else:
         try:
             start = date.fromisoformat(str(raw["start_date"]))
         except ValueError as exc:
             raise ValueError("start_date: must be an ISO date (YYYY-MM-DD)") from exc
+        checkpoint_start_date = start.isoformat()
 
     restatement = raw.get("restatement_margin_days", DEFAULT_RESTATEMENT_MARGIN_DAYS)
     if restatement is None:
@@ -294,6 +301,28 @@ def parse_config(
             ds_raw.get("marts_verify") or DEFAULT_DATASETS["marts_verify"]
         ),
     )
+    dataset_values = {
+        field: getattr(datasets, field) for field in DEFAULT_DATASETS
+    }
+    seen_datasets: dict[str, str] = {}
+    for field, value in dataset_values.items():
+        if value in seen_datasets:
+            raise ValueError(
+                f"datasets.{field}: must be distinct from "
+                f"datasets.{seen_datasets[value]}"
+            )
+        seen_datasets[value] = field
+    for field, default in DEFAULT_DATASETS.items():
+        suffix = next(
+            (
+                candidate
+                for candidate in SCRATCH_DATASET_SUFFIXES
+                if default.endswith(candidate)
+            ),
+            None,
+        )
+        if suffix is not None and not dataset_values[field].endswith(suffix):
+            raise ValueError(f"datasets.{field}: must end with {suffix}")
 
     buckets_raw = raw.get("buckets")
     report_bucket = _require(
@@ -326,6 +355,7 @@ def parse_config(
         api_version=api_version,
         mcc=mcc,
         timezone_override=timezone_override,
+        checkpoint_start_date=checkpoint_start_date,
     )
 
 

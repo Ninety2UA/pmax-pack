@@ -44,8 +44,14 @@ jobs:
       - name: Unit tests
         run: uv run pytest -q
 
+      - name: Deploy harness
+        run: make deploy-test
+
       - name: Validate GAQL fields offline
         run: uv run python scripts/validate_gaql.py --api-version v25
+
+      - name: Lint SQL dataset references
+        run: uv run python scripts/lint_dataset_refs.py
 
       - name: Render SQL templates and parse with sqlglot
         run: |

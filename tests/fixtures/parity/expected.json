@@ -1,0 +1,21 @@
+{
+  "campaigns": {
+    "220000001": 1.0,
+    "220000002": 0.25,
+    "220000003": 0.33,
+    "220000004": 0.5,
+    "220000005": 0.5
+  },
+  "asset_groups": {
+    "330000001": {"video_score": 1.0, "text_score": 1.0, "image_score": 1.0, "asset_group_bp_score": 1.0},
+    "330000002": {"video_score": 0.0, "text_score": 0.0, "image_score": 0.0, "asset_group_bp_score": 0.0},
+    "330000003": {"video_score": 1.0, "text_score": 1.0, "image_score": 1.0, "asset_group_bp_score": 1.0},
+    "330000004": {"video_score": 0.0, "text_score": 0.0, "image_score": 0.0, "asset_group_bp_score": 0.0},
+    "330000005": {"video_score": 1.0, "text_score": 1.0, "image_score": 1.0, "asset_group_bp_score": 1.0},
+    "330000006": {"video_score": 0.0, "text_score": 0.0, "image_score": 0.0, "asset_group_bp_score": 0.0},
+    "330000007": {"video_score": 1.0, "text_score": 1.0, "image_score": 1.0, "asset_group_bp_score": 1.0},
+    "330000008": {"video_score": 0.0, "text_score": 0.0, "image_score": 0.0, "asset_group_bp_score": 0.0},
+    "330000009": {"video_score": 1.0, "text_score": 1.0, "image_score": 1.0, "asset_group_bp_score": 1.0},
+    "330000010": {"video_score": 0.0, "text_score": 0.0, "image_score": 0.0, "asset_group_bp_score": 0.0}
+  }
+}

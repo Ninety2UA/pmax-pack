@@ -1,0 +1,332 @@
+{
+  "date": "2026-08-25",
+  "account": {
+    "account_id": 1110001110,
+    "account_name": "Fixture Account",
+    "ocid": "fixture-ocid"
+  },
+  "customer_sitelinks": 2,
+  "campaigns": [
+    {
+      "campaign_id": 220000001,
+      "campaign_name": "Fixture Campaign 1",
+      "status": "ENABLED",
+      "google_url_expansion_opt_out": true,
+      "ours_url_expansion_opt_out": true,
+      "positive_geo_target_type": "PRESENCE_OR_INTEREST",
+      "negative_geo_target_type": "PRESENCE_OR_INTEREST",
+      "campaign_sitelinks": 2,
+      "asset_groups": [
+        {
+          "asset_group_id": 330000001,
+          "asset_group_name": "Fixture Group 1",
+          "status": "ENABLED",
+          "ad_strength": "UNSPECIFIED",
+          "audiences": 1,
+          "search_themes": 2,
+          "action_items": [],
+          "asset_primary_status_reasons": [],
+          "counts": {
+            "headline": 9,
+            "long_headline": 2,
+            "description": 4,
+            "landscape": 4,
+            "square": 4,
+            "portrait": 4,
+            "square_logo": 1,
+            "landscape_logo": 1,
+            "video": 3
+          }
+        },
+        {
+          "asset_group_id": 330000002,
+          "asset_group_name": "Fixture Group 2",
+          "status": "ENABLED",
+          "ad_strength": "UNKNOWN",
+          "audiences": 1,
+          "action_items": ["ADD_ASSET"],
+          "asset_primary_status_reasons": ["ASSET_DISAPPROVED"],
+          "counts": {
+            "headline": 8,
+            "long_headline": 0,
+            "description": 3,
+            "landscape": 3,
+            "square": 3,
+            "portrait": 3,
+            "square_logo": 0,
+            "landscape_logo": 0,
+            "video": 2
+          }
+        }
+      ]
+    },
+    {
+      "campaign_id": 220000002,
+      "campaign_name": "Fixture Campaign 2",
+      "status": "ENABLED",
+      "google_url_expansion_opt_out": false,
+      "ours_url_expansion_opt_out": false,
+      "positive_geo_target_type": "PRESENCE_OR_INTEREST",
+      "negative_geo_target_type": "PRESENCE",
+      "campaign_sitelinks": 0,
+      "asset_groups": [
+        {
+          "asset_group_id": 330000003,
+          "asset_group_name": "Fixture Group 3",
+          "status": "ENABLED",
+          "ad_strength": "PENDING",
+          "audiences": 0,
+          "action_items": [],
+          "asset_primary_status_reasons": [],
+          "counts": {
+            "headline": 9,
+            "long_headline": 2,
+            "description": 4,
+            "landscape": 4,
+            "square": 4,
+            "portrait": 4,
+            "square_logo": 1,
+            "landscape_logo": 1,
+            "video": 3
+          }
+        },
+        {
+          "asset_group_id": 330000004,
+          "asset_group_name": "Fixture Group 4",
+          "status": "ENABLED",
+          "ad_strength": "NO_ADS",
+          "audiences": 0,
+          "action_items": [],
+          "asset_primary_status_reasons": [],
+          "counts": {
+            "headline": 8,
+            "long_headline": 0,
+            "description": 3,
+            "landscape": 3,
+            "square": 3,
+            "portrait": 3,
+            "square_logo": 0,
+            "landscape_logo": 0,
+            "video": 2
+          }
+        }
+      ]
+    },
+    {
+      "campaign_id": 220000003,
+      "campaign_name": "Fixture Campaign 3",
+      "status": "ENABLED",
+      "google_url_expansion_opt_out": true,
+      "ours_url_expansion_opt_out": null,
+      "positive_geo_target_type": "PRESENCE",
+      "negative_geo_target_type": "PRESENCE",
+      "campaign_sitelinks": 0,
+      "asset_groups": [
+        {
+          "asset_group_id": 330000005,
+          "asset_group_name": "Fixture Group 5",
+          "status": "ENABLED",
+          "ad_strength": "POOR",
+          "audiences": 1,
+          "action_items": [],
+          "asset_primary_status_reasons": [],
+          "counts": {
+            "headline": 9,
+            "long_headline": 2,
+            "description": 4,
+            "landscape": 4,
+            "square": 4,
+            "portrait": 4,
+            "square_logo": 1,
+            "landscape_logo": 1,
+            "video": 3
+          }
+        },
+        {
+          "asset_group_id": 330000006,
+          "asset_group_name": "Fixture Group 6",
+          "status": "ENABLED",
+          "ad_strength": "AVERAGE",
+          "audiences": 0,
+          "action_items": [],
+          "asset_primary_status_reasons": [],
+          "counts": {
+            "headline": 8,
+            "long_headline": 0,
+            "description": 3,
+            "landscape": 3,
+            "square": 3,
+            "portrait": 3,
+            "square_logo": 0,
+            "landscape_logo": 0,
+            "video": 2
+          }
+        }
+      ]
+    },
+    {
+      "campaign_id": 220000004,
+      "campaign_name": "Fixture Campaign 4",
+      "status": "ENABLED",
+      "google_url_expansion_opt_out": false,
+      "ours_url_expansion_opt_out": false,
+      "positive_geo_target_type": "PRESENCE_OR_INTEREST",
+      "negative_geo_target_type": "PRESENCE_OR_INTEREST",
+      "campaign_sitelinks": 0,
+      "asset_groups": [
+        {
+          "asset_group_id": 330000007,
+          "asset_group_name": "Fixture Group 7",
+          "status": "ENABLED",
+          "ad_strength": "GOOD",
+          "audiences": 1,
+          "action_items": [],
+          "asset_primary_status_reasons": [],
+          "counts": {
+            "headline": 9,
+            "long_headline": 2,
+            "description": 4,
+            "landscape": 4,
+            "square": 4,
+            "portrait": 4,
+            "square_logo": 1,
+            "landscape_logo": 1,
+            "video": 3
+          }
+        },
+        {
+          "asset_group_id": 330000008,
+          "asset_group_name": "Fixture Group 8",
+          "status": "ENABLED",
+          "ad_strength": "EXCELLENT",
+          "audiences": 0,
+          "action_items": [],
+          "asset_primary_status_reasons": [],
+          "counts": {
+            "headline": 8,
+            "long_headline": 0,
+            "description": 3,
+            "landscape": 3,
+            "square": 3,
+            "portrait": 3,
+            "square_logo": 0,
+            "landscape_logo": 0,
+            "video": 2
+          }
+        }
+      ]
+    },
+    {
+      "campaign_id": 220000005,
+      "campaign_name": "Fixture Campaign 5 Paused",
+      "status": "PAUSED",
+      "google_url_expansion_opt_out": false,
+      "ours_url_expansion_opt_out": false,
+      "positive_geo_target_type": "PRESENCE_OR_INTEREST",
+      "negative_geo_target_type": "PRESENCE_OR_INTEREST",
+      "campaign_sitelinks": 0,
+      "asset_groups": [
+        {
+          "asset_group_id": 330000009,
+          "asset_group_name": "Fixture Group 9 Paused",
+          "status": "ENABLED",
+          "ad_strength": "GOOD",
+          "audiences": 1,
+          "action_items": [],
+          "asset_primary_status_reasons": [],
+          "counts": {
+            "headline": 9,
+            "long_headline": 2,
+            "description": 4,
+            "landscape": 4,
+            "square": 4,
+            "portrait": 4,
+            "square_logo": 1,
+            "landscape_logo": 1,
+            "video": 3
+          }
+        },
+        {
+          "asset_group_id": 330000010,
+          "asset_group_name": "Fixture Group 10 Paused",
+          "status": "ENABLED",
+          "ad_strength": "EXCELLENT",
+          "audiences": 0,
+          "action_items": [],
+          "asset_primary_status_reasons": [],
+          "counts": {
+            "headline": 8,
+            "long_headline": 0,
+            "description": 3,
+            "landscape": 3,
+            "square": 3,
+            "portrait": 3,
+            "square_logo": 0,
+            "landscape_logo": 0,
+            "video": 2
+          }
+        }
+      ]
+    }
+  ],
+  "ours_only_assets": [
+    {
+      "campaign_id": 220000001,
+      "asset_group_id": 330000002,
+      "asset_id": 9900000001,
+      "field_type": "YOUTUBE_VIDEO",
+      "status": "ENABLED",
+      "source": "AUTOMATICALLY_CREATED",
+      "asset_type": "YOUTUBE_VIDEO",
+      "video_id": "fixture-auto-video"
+    },
+    {
+      "campaign_id": 220000001,
+      "asset_group_id": 330000002,
+      "asset_id": 9900000002,
+      "field_type": "DESCRIPTION",
+      "status": "PAUSED",
+      "source": "ADVERTISER",
+      "asset_type": "TEXT",
+      "text": "Fixture paused description"
+    }
+  ],
+  "coverage": [
+    "campaign.url.opted_out",
+    "campaign.url.opted_in",
+    "campaign.url.unknown",
+    "campaign.audience.present",
+    "campaign.audience.absent",
+    "campaign.sitelinks.below_4",
+    "campaign.sitelinks.at_4",
+    "campaign.geo.both_presence_or_interest",
+    "campaign.geo.mixed",
+    "campaign.geo.neither_presence_or_interest",
+    "asset_group.video.below_3",
+    "asset_group.video.at_3",
+    "asset_group.text.descriptions.below_4",
+    "asset_group.text.descriptions.at_4",
+    "asset_group.text.headlines.below_11",
+    "asset_group.text.headlines.at_11",
+    "asset_group.text.long_headlines.below_2",
+    "asset_group.text.long_headlines.at_2",
+    "asset_group.image.landscape.below_4",
+    "asset_group.image.landscape.at_4",
+    "asset_group.image.square.below_4",
+    "asset_group.image.square.at_4",
+    "asset_group.image.portrait.below_4",
+    "asset_group.image.portrait.at_4",
+    "asset_group.image.square_logo.absent",
+    "asset_group.image.square_logo.present",
+    "asset_group.image.landscape_logo.absent",
+    "asset_group.image.landscape_logo.present",
+    "asset_group.ad_strength.UNSPECIFIED",
+    "asset_group.ad_strength.UNKNOWN",
+    "asset_group.ad_strength.PENDING",
+    "asset_group.ad_strength.NO_ADS",
+    "asset_group.ad_strength.POOR",
+    "asset_group.ad_strength.AVERAGE",
+    "asset_group.ad_strength.GOOD",
+    "asset_group.ad_strength.EXCELLENT"
+  ]
+}
