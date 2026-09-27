@@ -1,7 +1,37 @@
 BEGIN TRANSACTION;
 DELETE FROM `{{ project }}.{{ marts_dataset }}.mart_cohort_asset_group`
 WHERE click_date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of;
-INSERT INTO `{{ project }}.{{ marts_dataset }}.mart_cohort_asset_group`
+INSERT INTO `{{ project }}.{{ marts_dataset }}.mart_cohort_asset_group` (
+  click_date,
+  account_id,
+  campaign_id,
+  asset_group_id,
+  ad_network_type,
+  metric_basis,
+  conversion_action_id,
+  conversion_action_resource_name,
+  conversion_action_name,
+  cohort_day,
+  is_window_rung,
+  cohort_label,
+  window_days,
+  window_provenance,
+  click_day_cost,
+  cohorted_conversions,
+  cohorted_value,
+  unknown_lag_conversions,
+  unknown_lag_value,
+  provenance,
+  unavailable_reason,
+  maturity,
+  observed_through,
+  source_refresh_date,
+  missing_cost_cell_count,
+  stale_cell_count,
+  source_run_id,
+  run_id,
+  cohort_counting
+)
 WITH costs AS (
   SELECT
     date AS click_date,
@@ -40,9 +70,11 @@ SELECT
   c.observed_through,
   c.source_refresh_date,
   IF(k.click_day_cost IS NULL, 1, 0) AS missing_cost_cell_count,
-  IF(c.maturity = 'immature', 1, 0) AS stale_cell_count,
+  IF(c.provenance IN ('measured', 'carried')
+    AND c.maturity = 'immature', 1, 0) AS stale_cell_count,
   c.source_run_id,
-  @run_id AS run_id
+  @run_id AS run_id,
+  c.cohort_counting
 FROM `{{ project }}.{{ marts_dataset }}.int_lag_prefix_asset_group` AS c
 LEFT JOIN costs AS k
   ON k.click_date = c.click_date

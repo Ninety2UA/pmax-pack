@@ -262,6 +262,19 @@ class FakeBQClient:
             raise NotFound(key)
         return self.tables[key]
 
+    def list_tables(self, dataset: str, **kwargs: Any) -> list[Any]:
+        """Expose dataset-local table listings for the load-stage orphan sweep."""
+        return [table for key, table in self.tables.items() if key.startswith(f"{dataset}.")]
+
+    def load_table_from_file(
+        self, file_obj: Any, destination: str, job_config: Any = None, **kwargs: Any,
+    ) -> FakeQueryJob:
+        """Consume the upload and model the job's result(timeout=...) surface."""
+        for _ in file_obj:
+            pass
+        self.calls.append(("load_table_from_file", destination))
+        return FakeQueryJob([])
+
     def create_table(
         self,
         table: Any,

@@ -25,6 +25,22 @@ def test_redact_masks_refresh_token_shape():
     assert "<redacted:refresh_token>" in out
 
 
+def test_redact_line_stringifies_collapses_and_masks():
+    """Check str() conversion, whitespace collapse, masking, and unescaped pipes.
+
+    Pipe escaping belongs to callers.
+    """
+    from pmax_pack.redact import redact_line
+
+    class MetadataFailure:
+        def __str__(self):
+            return f"  blocked\n\t| {_REFRESH_KEY}:\r\n {CANARY_REFRESH}  "
+
+    assert redact_line(MetadataFailure()) == (
+        f"blocked | {_REFRESH_KEY}: <redacted:refresh_token>"
+    )
+
+
 def test_redact_masks_developer_token_and_client_secret():
     text = (
         f"{_DEVELOPER_KEY}: canaryDevTokenValue0001\n"

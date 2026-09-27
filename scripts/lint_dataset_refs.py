@@ -37,12 +37,10 @@ TEMPLATED_TABLE_REFERENCE = re.compile(
     r"(?P<table_expression>\{\{\s*[^{}\r\n]+?\s*\}\})"
 )
 
-MART_CREATE = re.compile(
+DATASET_CREATE = re.compile(
     r"\bCREATE\s+"
     r"(?:TABLE\s+IF\s+NOT\s+EXISTS|OR\s+REPLACE\s+VIEW)\s+"
-    r"`?\s*(?:\{\{\s*project\s*\}\}\s*\.\s*)?"
-    r"\{\{\s*(?:marts_dataset|datasets\.marts)\s*\}\}\s*\.\s*"
-    r"(?P<table>[A-Za-z_][A-Za-z0-9_]*)",
+    r"`?\s*" + DATASET_REFERENCE.pattern,
     re.IGNORECASE,
 )
 
@@ -51,7 +49,7 @@ def _sql_files(sql_root: Path) -> list[Path]:
     return sorted(sql_root.rglob("*.sql"))
 
 
-def _manifest_mart_targets(manifest_path: Path) -> set[str]:
+def _manifest_targets(manifest_path: Path, dataset: str) -> set[str]:
     """Return targets that the runner wraps in CREATE statements."""
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     steps = manifest.get("steps", []) if isinstance(manifest, dict) else []
@@ -60,25 +58,34 @@ def _manifest_mart_targets(manifest_path: Path) -> set[str]:
         for step in steps
         if isinstance(step, dict)
         and step.get("kind") in {"ddl", "view"}
+        and step.get("target_dataset", "marts") == dataset
         and isinstance(step.get("name"), str)
     }
 
 
-def _marts_tables(sql_files: list[Path], manifest_path: Path) -> set[str]:
-    tables = _manifest_mart_targets(manifest_path)
+def _dataset_tables(
+    sql_files: list[Path], manifest_path: Path, dataset: str,
+) -> set[str]:
+    tables = _manifest_targets(manifest_path, dataset)
     for path in sql_files:
         text = path.read_text(encoding="utf-8")
-        tables.update(match.group("table") for match in MART_CREATE.finditer(text))
+        tables.update(
+            match.group("table") for match in DATASET_CREATE.finditer(text)
+            if (match.group("legacy") or match.group("attribute")) == dataset
+        )
     return tables
 
 
 def _registries(sql_files: list[Path], manifest_path: Path) -> dict[str, set[str]]:
-    marts = _marts_tables(sql_files, manifest_path)
+    marts = _dataset_tables(sql_files, manifest_path, "marts")
+    reporting = _dataset_tables(sql_files, manifest_path, "reporting")
     return {
         "raw": {*RAW_TABLES, OBSERVATION_TABLE.name},
         "ops": set(OPS_TABLES),
         "marts": marts,
         "marts_verify": marts,
+        "reporting": reporting,
+        "reporting_verify": reporting,
     }
 
 
@@ -131,7 +138,7 @@ def _parse_args() -> argparse.Namespace:
         "--manifest",
         type=Path,
         default=DEFAULT_MANIFEST,
-        help="manifest defining runner-created mart targets",
+        help="manifest defining runner-created marts and reporting targets",
     )
     return parser.parse_args()
 

@@ -104,7 +104,7 @@ def test_manifest_orders_all_three_score_marts() -> None:
     manifest = load_manifest(PRODUCT_ROOT / "src" / "pmax_pack" / "manifest.yaml")
     by_name = {step.name: step for step in manifest.steps}
     assert by_name["mart_bp_campaign"].partition_field == "snapshot_date"
-    assert "int_entities" in by_name["mart_bp_campaign"].depends_on
+    assert "build_int_entities_customer_asset" in by_name["mart_bp_campaign"].depends_on
     assert by_name["mart_bp_extended"].depends_on == (
         "mart_bp_asset_group",
         "build_mart_entities_asset_group",

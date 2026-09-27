@@ -1,4 +1,4 @@
--- R19 required set: performance, lag, and cohort at campaign and asset-group
+-- Required set: performance, lag, and cohort at campaign and asset-group
 -- grain. Entity marts are not in this empty-table contract because some are
 -- legitimately empty; customer timezone completeness is enforced at observe.
 WITH

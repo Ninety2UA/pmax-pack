@@ -1,7 +1,7 @@
 """Deterministic validation report assembly and GCS publication.
 
 The report is a pure fold over normalized ledger assertion rows and run
-metadata. It performs the R19 severity decision before rendering, redacts the
+metadata. It performs the severity decision before rendering, redacts the
 entire document once at the final boundary, and publishes one replaceable
 object per run id. Only executed daily ``run`` mode advances ``latest.md``.
 """
@@ -9,12 +9,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from itertools import chain, islice
+import re
 from typing import Any, Iterable, Mapping, Sequence
 
-from pmax_pack.redact import redact
+from pmax_pack.redact import redact, redact_line
 
 HARD = "HARD"
 SOFT = "SOFT"
+_BODY_LINE_COUNT = "- Report body lines: {body_line_count}"
 
 
 def _text(value: Any) -> str:
@@ -27,6 +30,12 @@ def _text(value: Any) -> str:
 
 def _account(value: Any) -> str:
     return str(int(value)) if isinstance(value, int) else str(value)
+
+
+def _inline(value: Any) -> str:
+    """Keep external values on one Markdown line with escaped cell separators."""
+    # Retention readers already escape pipes, so this boundary is idempotent.
+    return re.sub(r"\\*\|", r"\\|", " ".join(_text(value).split()))
 
 
 @dataclass(frozen=True)
@@ -54,6 +63,30 @@ class CheckResult:
         )
 
 
+def retention_check(drift: Sequence[str]) -> CheckResult | None:
+    """Render retention differences as one SOFT check, silent when equal."""
+    if not drift:
+        return None
+    return CheckResult(
+        name="retention_drift", severity=SOFT, passed=False,
+        observed=len(drift), expected=0, detail="; ".join(drift),
+    )
+
+
+def retention_metadata_check(failures: Sequence[str]) -> CheckResult | None:
+    """Report unavailable readers separately with safe single-line cell text."""
+    if not failures:
+        return None
+    detail = "; ".join(
+        redact_line(message).replace("|", "\\|")
+        for message in failures
+    )
+    return CheckResult(
+        name="retention_metadata", severity=SOFT, passed=False,
+        observed=len(failures), expected=0, detail=detail,
+    )
+
+
 @dataclass(frozen=True)
 class TableMetric:
     """Observational row count and freshness for one table.
@@ -66,6 +99,7 @@ class TableMetric:
     row_count: int
     fresh_through: date | None
     expected_fresh_through: date | None
+    expectation_note: str | None = None
 
     @property
     def stale(self) -> bool:
@@ -150,6 +184,9 @@ class ReportInput:
     parity: ParityRun | None = None
     skipped_reason: str | None = None
     handled_error: str | None = None
+    budget: Mapping[str, Any] | None = None
+    gap_summary: list[Mapping[str, Any]] = field(default_factory=list)
+    gap_examples: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -233,7 +270,82 @@ def _decision(source: ReportInput) -> tuple[str, list[str], list[str]]:
 def _items(values: Sequence[Any], empty: str = "None.") -> list[str]:
     if not values:
         return [empty]
-    return [f"- {_text(value)}" for value in values]
+    return [f"- {_inline(value)}" for value in values]
+
+
+def _seconds(value: Any) -> str:
+    return "unavailable" if value is None else f"{value:.3f} s"
+
+
+def _count(value: Any) -> str:
+    return "unavailable" if value is None else f"{value:,}"
+
+
+def _budget_lines(budget: Mapping[str, Any] | None) -> list[str]:
+    """Render measured values without deriving or gating on missing metrics."""
+    values = budget or {}
+    seconds = values.get("stage_seconds") or {}
+    jobs = values.get("stage_jobs") or {}
+    span = values.get("stage_span_seconds")
+    target = "informational target: 120 s"
+    if span is not None:
+        target += "; over target" if span > 120 else "; within target"
+    return [
+        "",
+        "### Budget (informational)",
+        "",
+        (
+            "Preliminary snapshot from CLI process entry; "
+            "stage/tail accounting is still in progress."
+            if values.get("snapshot_complete") is False else
+            "Measured from CLI process entry through the final report snapshot; "
+            "final upload excluded."
+        ),
+        "",
+        f"- Startup: {_seconds(values.get('startup_seconds'))}",
+        f"  - Pre-lease calls: {_seconds(values.get('pre_lease_seconds'))}",
+        f"- Startup jobs: {_count(values.get('startup_jobs'))} "
+        "(including pre-lease calls)",
+        f"- Stage span: {_seconds(span)} ({target})",
+        f"- Tail: {_seconds(values.get('tail_seconds'))}",
+        f"- Tail jobs: {_count(values.get('tail_jobs'))}",
+        f"- Process total: {_seconds(values.get('total_seconds'))}",
+        f"- Load-path jobs: {_count(values.get('load_path_jobs'))}",
+        f"- Total jobs: {_count(values.get('total_jobs'))} (submissions)",
+        f"- Rows loaded: {_count(values.get('rows_loaded'))}",
+        _BODY_LINE_COUNT + " (informational target: <2,000 lines)",
+        "",
+        "| Stage | Seconds | Jobs |",
+        "|---|---:|---:|",
+        *(
+            f"| {_inline(stage)} | {_seconds(seconds.get(stage))} | "
+            f"{_count(jobs.get(stage))} |"
+            for stage in dict.fromkeys(chain(seconds, jobs))
+        ),
+        *([] if seconds or jobs else ["| unavailable | unavailable | unavailable |"]),
+    ]
+
+
+def _gap_lines(source: ReportInput) -> list[str]:
+    """Render SQL aggregate counts and at most 50 example lines in total."""
+    lines = []
+    if source.gap_summary:
+        lines.extend([
+            "| Grain | Reason | Month | Cells |",
+            "|---|---|---|---:|",
+        ])
+        for item in source.gap_summary:
+            lines.append(
+                f"| {_inline(item.get('grain'))} | {_inline(item.get('reason'))} | "
+                f"{_inline(item.get('month'))} | {_count(item.get('cells'))} |"
+            )
+        lines.append("")
+    examples = source.gap_examples or chain(
+        (f"snapshot gap: {item}" for item in source.snapshot_gaps),
+        (f"stale cell: {item}" for item in source.stale_cells),
+    )
+    lines.extend(_items(list(islice(examples, 50))))
+    return lines
 
 
 def _render(
@@ -251,22 +363,25 @@ def _render(
         "",
         "## Run",
         "",
-        f"- Run ID: `{source.run_id}`",
-        f"- Mode: `{source.mode}`",
+        f"- Run ID: `{_inline(source.run_id)}`",
+        f"- Mode: `{_inline(source.mode)}`",
         f"- Dry run: {'yes' if source.dry_run else 'no'}",
         f"- As of: `{source.as_of.isoformat()}`",
-        f"- Image digest: `{source.image_digest}`",
-        f"- Credential fingerprint: `{source.credential_fingerprint}`",
-        f"- Query hash: `{source.query_hash}`",
-        f"- API version: `{source.api_version}`",
-        f"- Reference commit: `{source.reference_commit}`",
+        f"- Image digest: `{_inline(source.image_digest)}`",
+        f"- Credential fingerprint: `{_inline(source.credential_fingerprint)}`",
+        f"- Query hash: `{_inline(source.query_hash)}`",
+        f"- API version: `{_inline(source.api_version)}`",
+        f"- Reference commit: `{_inline(source.reference_commit)}`",
         f"- SQL files resolved: {source.sql_files_resolved}",
+        *(_budget_lines(source.budget) if status != "SKIPPED" else []),
         "",
         "## Accounts",
         "",
-        "Configured: " + (", ".join(source.configured_accounts) or "none"),
+        "Configured: "
+        + (", ".join(map(_inline, source.configured_accounts)) or "none"),
         "",
-        "Resolved: " + (", ".join(source.resolved_accounts) or "none"),
+        "Resolved: "
+        + (", ".join(map(_inline, source.resolved_accounts)) or "none"),
         "",
         "## Hard failures",
         "",
@@ -283,16 +398,19 @@ def _render(
     ]
     if source.tables:
         for metric in source.tables:
-            if metric.stale:
+            if metric.expectation_note:
+                result = "INFO"
+            elif metric.stale:
                 result = "WARN"
             elif metric.row_count == 0:
                 result = "INFO (empty)"
             else:
                 result = "PASS"
             lines.append(
-                f"| {metric.table} | {metric.row_count:,} | "
-                f"{_text(metric.fresh_through)} | "
-                f"{_text(metric.expected_fresh_through)} | {result} |"
+                f"| {_inline(metric.table)} | {metric.row_count:,} | "
+                f"{_inline(metric.fresh_through)} | "
+                f"{_inline(metric.expectation_note or metric.expected_fresh_through)} "
+                f"| {result} |"
             )
     else:
         lines.append("| No table metrics supplied | 0 | - | - | INFO |")
@@ -308,10 +426,13 @@ def _render(
     )
     if source.checks:
         for check in source.checks:
+            result = "PASS" if check.passed else (
+                "FAIL" if check.severity.upper() == HARD else "WARN"
+            )
             lines.append(
-                f"| {check.name} | {check.severity.upper()} | "
-                f"{'PASS' if check.passed else 'FAIL'} | {_text(check.observed)} | "
-                f"{_text(check.expected)} | {_text(check.detail)} |"
+                f"| {_inline(check.name)} | {_inline(check.severity.upper())} | "
+                f"{result} | {_inline(check.observed)} | "
+                f"{_inline(check.expected)} | {_inline(check.detail)} |"
             )
     else:
         lines.append("| No assertion rows supplied | INFO | - | - | - | - |")
@@ -321,8 +442,9 @@ def _render(
         for item in source.asset_participation:
             ratio = "-" if item.ratio is None else f"{item.ratio:.6f}"
             lines.append(
-                f"- account={item.account_id}, network={item.ad_network_type}, "
-                f"metric={item.metric}, asset_sum={item.asset_sum:.6f}, "
+                f"- account={_inline(item.account_id)}, "
+                f"network={_inline(item.ad_network_type)}, "
+                f"metric={_inline(item.metric)}, asset_sum={item.asset_sum:.6f}, "
                 f"campaign_truth={item.campaign_truth:.6f}, ratio={ratio}"
             )
     else:
@@ -331,9 +453,9 @@ def _render(
     lines.extend(["", "## Unknown-lag share", ""])
     if source.unknown_lag:
         lines.extend(
-            f"- account={_text(item.get('account_id'))}, "
-            f"basis={_text(item.get('basis') or item.get('metric_basis'))}, "
-            f"share={_text(item.get('share'))}"
+            f"- account={_inline(item.get('account_id'))}, "
+            f"basis={_inline(item.get('basis') or item.get('metric_basis'))}, "
+            f"share={_inline(item.get('share'))}"
             for item in source.unknown_lag
         )
     else:
@@ -342,7 +464,7 @@ def _render(
     lines.extend(["", "## Assumed-current share by account", ""])
     if source.assumed_current:
         lines.extend(
-            f"- account={item.account_id}, cells={item.cells:,}/"
+            f"- account={_inline(item.account_id)}, cells={item.cells:,}/"
             f"{item.total_cells:,}, share={item.share:.6f}"
             for item in source.assumed_current
         )
@@ -352,21 +474,16 @@ def _render(
     lines.extend(["", "## Cohort coverage", ""])
     if source.coverage:
         lines.extend(
-            f"- provenance={item.provenance}, maturity={item.maturity}, "
+            f"- provenance={_inline(item.provenance)}, "
+            f"maturity={_inline(item.maturity)}, "
             f"cells={item.cells:,}/{item.total_cells:,}, share={item.share:.6f}"
             for item in source.coverage
         )
     else:
         lines.append("None reported.")
 
+    lines.extend(["", "## Snapshot gaps and stale cells", "", *_gap_lines(source)])
     sections: list[tuple[str, Iterable[str]]] = [
-        (
-            "Snapshot gaps and stale cells",
-            [
-                *(f"snapshot gap: {item}" for item in source.snapshot_gaps),
-                *(f"stale cell: {item}" for item in source.stale_cells),
-            ],
-        ),
         ("Frozen chunks", source.frozen_chunks),
         ("NULL-cost cells", source.null_cost_cells),
     ]
@@ -381,7 +498,7 @@ def _render(
         lines.extend(
             [
                 f"- Date: {source.parity.run_date.isoformat()}",
-                f"- Result: {source.parity.result}",
+                f"- Result: {_inline(source.parity.result)}",
                 f"- Binding: {parity_status}",
             ]
         )
@@ -395,9 +512,15 @@ def _render(
 
 
 def build_report(source: ReportInput) -> ValidationReport:
-    """Apply R19 decisions and render one redacted report."""
+    """Apply severity decisions and render one redacted report."""
     status, hard, warnings = _decision(source)
     markdown = redact(_render(source, status, hard, warnings))
+    # Redaction can collapse content; insert only the measured integer afterward.
+    markdown = markdown.replace(
+        _BODY_LINE_COUNT,
+        f"- Report body lines: {len(markdown.splitlines())}",
+        1,
+    )
     return ValidationReport(
         run_id=source.run_id,
         mode=source.mode,
@@ -414,14 +537,34 @@ def checks_from_rows(rows: Iterable[Mapping[str, Any]]) -> list[CheckResult]:
     return [CheckResult.from_row(row) for row in rows]
 
 
-def write_report(storage_client: Any, bucket: str, report: ValidationReport) -> str:
-    """Write or replace this run object and advance latest for executed runs."""
+def write_report(
+    storage_client: Any, bucket: str, report: ValidationReport,
+    *, previous_markdown: str | None = None,
+) -> str:
+    """Publish a run, or refresh its budget without replacing a newer latest.
+
+    Initial publication runs under the lease. A post-lease budget refresh
+    replaces latest only when its previous body and storage generation match.
+    """
+    from google.api_core.exceptions import NotFound, PreconditionFailed
+
     primary = storage_client.bucket(bucket).blob(report.object_name)
     primary.upload_from_string(report.markdown, content_type="text/markdown")
     if report.mode == "run" and report.status != "SKIPPED":
         latest_name = f"reports/{report.deployment}/latest.md"
-        storage_client.bucket(bucket).blob(latest_name).upload_from_string(
-            report.markdown,
-            content_type="text/markdown",
-        )
+        latest = storage_client.bucket(bucket).blob(latest_name)
+        if previous_markdown is None:
+            latest.upload_from_string(report.markdown, content_type="text/markdown")
+        else:
+            try:
+                latest.reload()
+                generation = latest.generation
+                if latest.download_as_text() == previous_markdown:
+                    latest.upload_from_string(
+                        report.markdown, content_type="text/markdown",
+                        if_generation_match=generation,
+                    )
+            except (NotFound, PreconditionFailed):
+                # A later publisher or operator owns the pointer now.
+                pass
     return f"gs://{bucket}/{report.object_name}"

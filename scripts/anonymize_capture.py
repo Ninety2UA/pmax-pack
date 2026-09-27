@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Anonymize a gaarf capture directory into shareable fixtures (KTD9).
+"""Anonymize a gaarf capture directory into shareable fixtures.
 
 Re-keys ids consistently, replaces text/URLs/video metadata, and perturbs
 metrics with a seeded factor while keeping arithmetic identities:

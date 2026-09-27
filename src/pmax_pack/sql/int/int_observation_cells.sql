@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS `{{ project }}.{{ marts_dataset }}.int_observation_ce
   observed_through TIMESTAMP,
   source_refresh_date DATE,
   source_run_id STRING,
-  built_by_run_id STRING
+  built_by_run_id STRING,
+  cohort_counting STRING
 )
 PARTITION BY click_date
 CLUSTER BY account_id, campaign_id, asset_id, metric_basis;
@@ -39,7 +40,37 @@ DELETE FROM `{{ project }}.{{ marts_dataset }}.int_observation_cells`
 WHERE click_date BETWEEN
   DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of;
 
-INSERT INTO `{{ project }}.{{ marts_dataset }}.int_observation_cells`
+INSERT INTO `{{ project }}.{{ marts_dataset }}.int_observation_cells` (
+  click_date,
+  account_id,
+  grain,
+  campaign_id,
+  asset_group_id,
+  asset_id,
+  field_type,
+  ad_network_type,
+  metric_basis,
+  conversion_action_id,
+  conversion_action_resource_name,
+  conversion_action_name,
+  cohort_day,
+  is_window_rung,
+  cohort_label,
+  window_days,
+  window_provenance,
+  cohorted_conversions,
+  cohorted_value,
+  unknown_lag_conversions,
+  unknown_lag_value,
+  provenance,
+  unavailable_reason,
+  maturity,
+  observed_through,
+  source_refresh_date,
+  source_run_id,
+  built_by_run_id,
+  cohort_counting
+)
 WITH
 observe_success AS (
   SELECT DISTINCT
@@ -207,6 +238,20 @@ keys AS (
   UNION DISTINCT
   SELECT * FROM observation_keys
 ),
+windows AS (
+  SELECT
+    click_date,
+    account_id,
+    metric_basis,
+    conversion_action_resource_name,
+    LEAST(click_through_lookback_window_days, {{ reporting_window_days }})
+      AS click_through_lookback_window_days,
+    IF(click_through_lookback_window_days >= {{ reporting_window_days }},
+      'capped by reporting window', window_provenance) AS window_provenance
+  FROM `{{ project }}.{{ marts_dataset }}.int_lookback_windows`
+  WHERE click_date BETWEEN
+    DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
+),
 configured_days AS (
 {% for day in cohort_days %}
   SELECT {{ day }} AS cohort_day{% if not loop.last %} UNION ALL{% endif %}
@@ -219,10 +264,10 @@ ladder AS (
     d.cohort_day = w.click_through_lookback_window_days AS is_window_rung,
     w.click_through_lookback_window_days AS window_days,
     w.window_provenance,
-    DATE_ADD(k.click_date, INTERVAL d.cohort_day DAY) AS target_date,
+    DATE_ADD(k.click_date, INTERVAL (d.cohort_day + 1) DAY) AS target_date,
     b.latest_selected_observation_date
   FROM keys AS k
-  INNER JOIN `{{ project }}.{{ marts_dataset }}.int_lookback_windows` AS w
+  INNER JOIN windows AS w
     ON w.click_date = k.click_date
     AND w.account_id = k.account_id
     AND w.metric_basis = k.metric_basis
@@ -234,7 +279,9 @@ ladder AS (
   WHERE w.click_date BETWEEN
       DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
     AND d.cohort_day <= w.click_through_lookback_window_days
-    AND DATE_ADD(k.click_date, INTERVAL d.cohort_day DAY)
+    -- A capped rung remains visible once the last accessible morning arrives.
+    AND DATE_ADD(k.click_date,
+      INTERVAL LEAST(d.cohort_day + 1, {{ reporting_window_days }}) DAY)
       <= b.latest_selected_observation_date
   UNION DISTINCT
   SELECT
@@ -244,10 +291,10 @@ ladder AS (
     w.click_through_lookback_window_days,
     w.window_provenance,
     DATE_ADD(k.click_date,
-      INTERVAL w.click_through_lookback_window_days DAY),
+      INTERVAL (w.click_through_lookback_window_days + 1) DAY),
     b.latest_selected_observation_date
   FROM keys AS k
-  INNER JOIN `{{ project }}.{{ marts_dataset }}.int_lookback_windows` AS w
+  INNER JOIN windows AS w
     ON w.click_date = k.click_date
     AND w.account_id = k.account_id
     AND w.metric_basis = k.metric_basis
@@ -258,7 +305,8 @@ ladder AS (
   WHERE w.click_date BETWEEN
       DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
     AND DATE_ADD(k.click_date,
-      INTERVAL w.click_through_lookback_window_days DAY)
+      INTERVAL LEAST(w.click_through_lookback_window_days + 1,
+        {{ reporting_window_days }}) DAY)
     <= b.latest_selected_observation_date
 ),
 first_snapshots AS (
@@ -306,6 +354,10 @@ resolved AS (
   SELECT
     r.*,
     CASE
+      WHEN r.target_date > DATE_ADD(r.click_date,
+        INTERVAL {{ reporting_window_days }} DAY) THEN 'unavailable'
+      WHEN r.grain = 'asset' AND r.cohort_day = 0
+        AND r.first_snapshot_date IS NULL THEN 'unavailable'
       WHEN r.target_date < r.first_snapshot_date THEN 'unavailable'
       WHEN r.observed_date = r.target_date THEN 'measured'
       WHEN r.observed_date = r.first_snapshot_date THEN 'unavailable'
@@ -314,6 +366,10 @@ resolved AS (
       ELSE 'unavailable'
     END AS resolved_provenance,
     CASE
+      WHEN r.target_date > DATE_ADD(r.click_date,
+        INTERVAL {{ reporting_window_days }} DAY) THEN 'capped by reporting window'
+      WHEN r.grain = 'asset' AND r.cohort_day = 0
+        AND r.first_snapshot_date IS NULL THEN 'first snapshot unknown'
       WHEN r.target_date < r.first_snapshot_date THEN 'before first snapshot'
       WHEN r.observed_date = r.target_date THEN NULL
       WHEN r.observed_date = r.first_snapshot_date THEN 'seed only'
@@ -350,11 +406,18 @@ SELECT
   CAST(NULL AS FLOAT64) AS unknown_lag_value,
   resolved_provenance AS provenance,
   resolved_reason AS unavailable_reason,
-  IF(latest_selected_observation_date >= target_date,
-    'complete', 'immature') AS maturity,
+  IF(resolved_provenance = 'unavailable', NULL,
+    IF(latest_selected_observation_date >= target_date,
+      'complete', 'immature')) AS maturity,
   TIMESTAMP(observed_date, COALESCE(time_zone, 'UTC')) AS observed_through,
   observed_date AS source_refresh_date,
   source_run_id,
-  @run_id AS built_by_run_id
-FROM resolved;
+  @run_id AS built_by_run_id,
+  'arp_calendar' AS cohort_counting
+FROM resolved
+-- Keep unavailable reconciliation cells for pre-snapshot Google history.
+WHERE cohort_day != 0
+  OR grain = 'asset_group'
+  OR first_snapshot_date IS NULL
+  OR target_date >= first_snapshot_date;
 COMMIT TRANSACTION;

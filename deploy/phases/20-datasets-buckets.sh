@@ -6,29 +6,24 @@ ensure_dataset() {
   if [[ "$PLAN" -eq 1 ]]; then
     print_command bq show --project_id="$PROJECT" --format=none "$PROJECT:$dataset"
     print_command bq mk --dataset --location=EU --project_id="$PROJECT" "$PROJECT:$dataset"
-    return
-  fi
-  if bq show --project_id="$PROJECT" --format=none "$PROJECT:$dataset" >/dev/null 2>&1; then
+  elif bq show --project_id="$PROJECT" --format=none "$PROJECT:$dataset" >/dev/null 2>&1; then
     echo "dataset exists: $dataset"
   else
     bq mk --dataset --location=EU --project_id="$PROJECT" "$PROJECT:$dataset"
   fi
+  run_cmd bq update --dataset --project_id="$PROJECT" --location=EU \
+    --set_label=app:pmax --set_label="env:$PMAX_ENV" "$PROJECT:$dataset"
 }
 
-for dataset in \
-  "$DATASET_RAW" "$DATASET_MARTS" "$DATASET_OPS" "$DATASET_SNAPSHOTS" \
-  "$DATASET_PARITY" "$DATASET_PARITY_BQ" "$DATASET_CI" "$DATASET_CI_BQ" \
-  "$DATASET_VERIFY"; do
+IFS=',' read -r -a _pmax_label_datasets <<<"$DATASETS_CSV"
+for dataset in "${_pmax_label_datasets[@]}"; do
   ensure_dataset "$dataset"
 done
 
-if [[ "$PLAN" -eq 1 ]]; then
-  print_command bq update --project_id="$PROJECT" --location=EU \
-    --default_table_expiration=604800 "$PROJECT:$DATASET_VERIFY"
-else
-  bq update --project_id="$PROJECT" --location=EU \
-    --default_table_expiration=604800 "$PROJECT:$DATASET_VERIFY"
-fi
+for dataset in "$DATASET_VERIFY" "$DATASET_REPORTING_VERIFY"; do
+  run_cmd bq update --project_id="$PROJECT" --location=EU \
+    --default_table_expiration=604800 "$PROJECT:$dataset"
+done
 
 ensure_bucket() {
   local bucket="$1"
@@ -36,15 +31,15 @@ ensure_bucket() {
     print_command gcloud storage buckets describe "gs://$bucket" --project="$PROJECT" --quiet
     print_command gcloud storage buckets create "gs://$bucket" --project="$PROJECT" \
       --location=EU --uniform-bucket-level-access --public-access-prevention --quiet
-    return
-  fi
-  if gcloud storage buckets describe "gs://$bucket" --project="$PROJECT" \
+  elif gcloud storage buckets describe "gs://$bucket" --project="$PROJECT" \
     --format="value(name)" --quiet >/dev/null 2>&1; then
     echo "bucket exists: $bucket"
   else
     gcloud storage buckets create "gs://$bucket" --project="$PROJECT" \
       --location=EU --uniform-bucket-level-access --public-access-prevention --quiet
   fi
+  run_cmd gcloud storage buckets update "gs://$bucket" --project="$PROJECT" \
+    --update-labels="app=pmax,env=$PMAX_ENV" --quiet
 }
 
 ensure_bucket "$REPORT_BUCKET"

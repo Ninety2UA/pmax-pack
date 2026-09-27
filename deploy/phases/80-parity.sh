@@ -1,6 +1,64 @@
 #!/usr/bin/env bash
 # Real-data parity is operator-run only. CI never reaches this phase.
 
+# Check live labels, retaining only pack values and a count of other keys.
+# Never persist foreign label values, dataset metadata, or access entries.
+RESOURCE_LABELS="$(uv run python - "$CONFIG_LOCAL" "$PLAN" <<'PY'
+from datetime import datetime, timezone
+import json
+import shlex
+import subprocess
+import sys
+from pmax_pack.config import load_config
+
+config = load_config(sys.argv[1])
+plan = sys.argv[2] == "1"
+project = config.deployment.project
+region = config.deployment.region
+result = {"datasets": {}, "buckets": {}, "jobs": {}}
+
+
+def labels(command: list[str], *, job: bool = False) -> dict:
+    """Retain only the live labels from a resource describe response."""
+    if plan:
+        print("PLAN  " + shlex.join(command), file=sys.stderr)
+        return {}
+    response = subprocess.run(command, text=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, check=False)
+    if response.returncode:
+        raise SystemExit("resource label describe failed")
+    try:
+        data = json.loads(response.stdout)
+        value = data.get("metadata", {}).get("labels", {}) if job else data.get("labels", {})
+        if not isinstance(value, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in value.items()):
+            raise ValueError
+    except (ValueError, AttributeError):
+        raise SystemExit("resource labels are not a JSON dictionary") from None
+    if value.get("app") != "pmax" or value.get("env") != config.env:
+        raise SystemExit("resource labels do not match app=pmax and configured env")
+    return {"app": value["app"], "env": value["env"],
+            "other_label_count": len(set(value) - {"app", "env"})}
+
+
+for dataset in dict.fromkeys(vars(config.datasets).values()):
+    result["datasets"][dataset] = labels([
+        "bq", "show", "--dataset", f"--project_id={project}", "--format=json",
+        f"{project}:{dataset}",
+    ])
+for bucket in (config.buckets.report_bucket, config.buckets.config_bucket):
+    result["buckets"][bucket] = labels([
+        "gcloud", "storage", "buckets", "describe", f"gs://{bucket}",
+        f"--project={project}", "--format=json(labels)", "--quiet",
+    ])
+result["jobs"]["pmax-pack-daily"] = labels([
+    "gcloud", "run", "jobs", "describe", "pmax-pack-daily", f"--project={project}",
+    f"--region={region}", "--format=json(metadata.labels)", "--quiet",
+], job=True)
+result["observed_at"] = datetime.now(timezone.utc).isoformat()
+print(json.dumps(result))
+PY
+)" || die "parity resource label capture failed"
+
 PARITY_ACCOUNT="${PMAX_PARITY_ACCOUNT:-${ACCOUNTS_CSV%%,*}}"
 PARITY_DATE="${PMAX_PARITY_DATE:-$RUN_DAY}"
 BT=$'\x60'
@@ -33,7 +91,7 @@ else
   PACKAGED_PARITY_PINS="$(uv run python -c 'import json; from pmax_pack.parity import PARITY_API_VERSION, REFERENCE_COMMIT, reference_query_hash; print(json.dumps({"query_hash": reference_query_hash(), "reference_commit": REFERENCE_COMMIT, "api_version": PARITY_API_VERSION}))')"
   uv run python - "$PARITY_EVIDENCE" "$IMAGE_REF" "$PARITY_RUN_ID" \
     "$PARITY_DATE" "$PARITY_RECORD" "${RUN_RECORD_PRESERVED:-0}" \
-    "$PACKAGED_PARITY_PINS" <<'PY'
+    "$PACKAGED_PARITY_PINS" "$RESOURCE_LABELS" <<'PY'
 from __future__ import annotations
 
 import json
@@ -71,6 +129,7 @@ record = {
     "parity_run_id": expected_run_id,
     "date": sys.argv[4],
     "image_digest": image_digest,
+    "resource_labels": json.loads(sys.argv[8]),
     **{field: detail[field] for field in pin_fields},
 }
 path = Path(sys.argv[5])
@@ -83,6 +142,7 @@ if path.exists() and preserve_existing:
     if not isinstance(existing, dict) or existing.get("image_digest") != image_ref:
         raise SystemExit("existing parity evidence does not match current image")
     existing.update({field: detail[field] for field in pin_fields})
+    existing["resource_labels"] = json.loads(sys.argv[8])
     record = existing
     print(f"preserving unvalidated parity evidence identity: {path}")
 temporary = path.with_suffix(path.suffix + ".tmp")

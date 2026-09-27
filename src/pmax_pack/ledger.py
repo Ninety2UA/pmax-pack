@@ -1,6 +1,8 @@
 """Append-only run ledger, compare-and-set lease, and checkpoint store.
 
-Events are written with insert_rows_json (streaming insert, never DML).
+Events use insert_rows_json. The incident checkpoint reset is the sole DML
+exception: a transaction deletes checkpoints and records its audit event after
+refusing any streaming buffer.
 State is derived as latest-per-key by query. Every free-text string
 field passes through redact() in the single insert helper. The client
 is injected. now_fn is sampled fresh at every event write.
@@ -16,8 +18,9 @@ from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from google.api_core.exceptions import NotFound, PreconditionFailed
+from google.api_core.exceptions import BadRequest, NotFound, PreconditionFailed
 
+from pmax_pack.labels import label_value
 from pmax_pack.redact import redact
 
 LEASE_BUDGET = {
@@ -171,12 +174,16 @@ class Ledger:
         dataset: str,
         now_fn: Callable[[], datetime] | None = None,
         maximum_bytes_billed: int = DEFAULT_MAXIMUM_BYTES_BILLED,
+        env: str = "prod",
+        run_id: str = "ledger",
     ) -> None:
         self._client = client
         self._project = project
         self._dataset = dataset
         self._now_fn = now_fn or _default_now
         self._maximum_bytes_billed = maximum_bytes_billed
+        self._env = env
+        self._run_id = run_id
 
     def _table_id(self, name: str) -> str:
         return f"{self._project}.{self._dataset}.{name}"
@@ -207,6 +214,11 @@ class Ledger:
         job_config = bigquery.QueryJobConfig(
             query_parameters=query_parameters,
             maximum_bytes_billed=self._maximum_bytes_billed,
+            labels={
+                "app": "pmax", "env": self._env,
+                "run_id": label_value(params.get("run_id", self._run_id)),
+                "stage": "checkpoint",
+            },
         )
         job = self._client.query(sql, job_config=job_config)
         return [_row_dict(row) for row in job.result()]
@@ -390,6 +402,62 @@ class Ledger:
             },
         )
 
+    def reset_checkpoint(
+        self,
+        account_id: str | int,
+        chunk: str,
+        run_id: str,
+        now: datetime | None = None,
+    ) -> None:
+        """Delete one chunk across hashes and atomically record its reset event.
+
+        The caller holds the pipeline lease so a concurrent backfill cannot
+        re-create checkpoints while the incident reset is being recorded.
+        """
+        if _chunk_month_end(chunk).strftime("%Y-%m") != chunk:
+            raise ValueError("chunk must be a month in YYYY-MM format")
+        buffer_message = (
+            "checkpoint reset refused: load_checkpoints has a streaming buffer; "
+            "wait for it to drain (rarely up to 90 minutes), then re-run the reset"
+        )
+        table = self._client.get_table(self._table_id("load_checkpoints"))
+        if table.streaming_buffer is not None:
+            raise RuntimeError(buffer_message)
+        sql = f"""
+BEGIN TRANSACTION;
+DELETE FROM `{self._table_id('load_checkpoints')}`
+WHERE account_id = @account_id
+  AND chunk = @chunk;
+INSERT INTO `{self._table_id('stages')}` (
+  run_id,
+  stage,
+  status,
+  account_id,
+  detail,
+  error,
+  event_ts
+)
+VALUES (
+  @run_id,
+  'checkpoint_reset',
+  'SUCCESS',
+  @account_id,
+  @detail,
+  NULL,
+  TIMESTAMP(@event_ts)
+);
+COMMIT TRANSACTION;
+""".strip()
+        try:
+            self._query(
+                sql, account_id=int(account_id), chunk=chunk, run_id=run_id,
+                detail=json.dumps({"chunk": chunk}), event_ts=_iso(self._stamp(now)),
+            )
+        except BadRequest as exc:
+            if "streaming buffer" in str(exc).lower():
+                raise RuntimeError(buffer_message) from exc
+            raise
+
     def assertion_result(
         self,
         run_id: str,
@@ -510,7 +578,7 @@ class Ledger:
     def first_snapshot_date(self, account_id: str | int) -> date | None:
         """Return earliest-per-key marker with observe SUCCESS.
 
-        This is BY DESIGN (KTD4). A seed observation is the row whose
+        A seed observation is the row whose
         observed_date equals this account's first valid snapshot date. An
         orphaned marker cannot bind a seed; a later insert can supply the first
         valid marker.

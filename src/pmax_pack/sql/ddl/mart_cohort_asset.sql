@@ -28,5 +28,6 @@ SELECT
   CAST(NULL AS INT64) AS missing_cost_cell_count,
   CAST(NULL AS INT64) AS stale_cell_count,
   CAST(NULL AS STRING) AS source_run_id,
-  CAST(NULL AS STRING) AS run_id
+  CAST(NULL AS STRING) AS run_id,
+  CAST(NULL AS STRING) AS cohort_counting
 LIMIT 0

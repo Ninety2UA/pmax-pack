@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     from google.cloud import bigquery
 
     outcome = grant(bigquery.Client(project=args.project), args.project, args.dataset, args.member, args.role)
-    print(f"dataset access {outcome}: {args.role} for {args.member} on {args.project}:{args.dataset}")
+    print(f"dataset access {outcome}: {args.role} on {args.project}:{args.dataset}")
     return 0
 
 

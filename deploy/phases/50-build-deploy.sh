@@ -4,6 +4,15 @@
 AR_REPOSITORY="pmax-pack"
 IMAGE_BASE="${REGION}-docker.pkg.dev/${PROJECT}/${AR_REPOSITORY}/pmax-pack"
 REQUESTED_IMAGE_REF="${PMAX_IMAGE_REF:-}"
+[[ "${LADDER_PREPARED:-0}" == 1 ]] || prepare_ladder_continuation
+if [[ -z "$REQUESTED_IMAGE_REF" && "${PMAX_FORCE_BUILD:-0}" != 1 && \
+      -n "${LADDER_CONTINUATION_IMAGE_REF:-}" ]]; then
+  REQUESTED_IMAGE_REF="$LADDER_CONTINUATION_IMAGE_REF"
+  echo "continuation pass $LADDER_PASS_NUMBER: reusing partial-pass image $REQUESTED_IMAGE_REF (PMAX_FORCE_BUILD=1 starts a new build)"
+fi
+if [[ -z "${PMAX_IMAGE_REF:-}" ]]; then
+  validate_ladder_image_reuse "$REQUESTED_IMAGE_REF"
+fi
 IMAGE_TAG="${PMAX_IMAGE_TAG:-$(date -u +%Y%m%d-%H%M%S)}"
 TAGGED_IMAGE="${IMAGE_BASE}:${IMAGE_TAG}"
 
@@ -90,8 +99,11 @@ PY
   IMAGE_REF="${IMAGE_BASE}@${IMAGE_DIGEST}"
 fi
 
+bind_ladder_image "$IMAGE_REF"
+
 run_cmd gcloud run jobs deploy pmax-pack-daily --project="$PROJECT" \
   --region="$REGION" --image="$IMAGE_REF" --service-account="$RUNTIME_SA" \
+  --labels="app=pmax,env=$PMAX_ENV" \
   --tasks=1 --max-retries=0 --task-timeout=6h --memory=2Gi \
   --set-env-vars="PMAX_CONFIG=$CONFIG_URI,PMAX_REPORT_BUCKET=$REPORT_BUCKET,PMAX_IMAGE_DIGEST=$IMAGE_REF,GOOGLE_ADS_CONFIGURATION_FILE_PATH=/secrets/google-ads.yaml,OTEL_SDK_DISABLED=true" \
   --set-secrets="/secrets/google-ads.yaml=$SECRET_NAME:$SECRET_VERSION" \

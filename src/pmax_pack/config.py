@@ -8,7 +8,9 @@ deliberate convenience) but reject floats and anything with dashes.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+import re
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -16,15 +18,17 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 
-COHORT_BOUNDARY = frozenset(list(range(1, 15)) + [21, 30, 45, 60, 90])
-DEFAULT_COHORT_DAYS = [1, 3, 7, 14, 30, 60, 90]
+log = logging.getLogger(__name__)
+
+COHORT_BOUNDARY = frozenset(list(range(0, 15)) + [21, 30, 45, 60, 90])
+DEFAULT_COHORT_DAYS = [0, 1, 3, 5, 7, 14, 30]
 DEFAULT_REGION = "europe-west1"
 DEFAULT_API_VERSION = "v25"
 DEFAULT_RESTATEMENT_MARGIN_DAYS = 7
-DEFAULT_CHECKPOINT_START_DATE = "default-90d"
+DEFAULT_REPORTING_WINDOW_DAYS = 90
 
-# Reconciliation tolerance fractions (U4 freezes parity from the pinned chain;
-# these are documented starting defaults).
+# Documented starting defaults for reconciliation tolerance fractions.
+# Parity tolerance is frozen against the pinned reference chain.
 DEFAULT_TOLERANCE_CAMPAIGN = 0.01
 DEFAULT_TOLERANCE_ASSET_VS_CAMPAIGN = 0.0
 DEFAULT_TOLERANCE_CROSS_GRAIN = 0.0
@@ -42,8 +46,15 @@ DEFAULT_DATASETS = {
     "parity_scratch_bq": "pmax_parity_scratch_bq",
     "ci_scratch": "pmax_ci_scratch",
     "ci_scratch_bq": "pmax_ci_scratch_bq",
+    "reporting": "pmax_reporting",
+    "reporting_verify": "pmax_reporting_verify",
 }
 SCRATCH_DATASET_SUFFIXES = ("_scratch", "_scratch_bq")
+_PRINCIPAL_PATTERN = re.compile(
+    r"(?:user|serviceAccount):[A-Za-z0-9._'+-]+@"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+"
+)
 
 
 def _require(d: dict[str, Any] | None, key: str, named: str) -> Any:
@@ -91,6 +102,23 @@ def _as_number(value: Any, named: str) -> float:
         raise ValueError(f"{named}: must be a number") from exc
 
 
+def _as_principals(value: Any, named: str) -> list[str]:
+    """Validate unique email principals without normalizing or echoing them."""
+    if not isinstance(value, list):
+        raise ValueError(f"{named}: must be a list of principal strings")
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or _PRINCIPAL_PATTERN.fullmatch(item) is None:
+            raise ValueError(
+                f"{named}[{index}]: principal must be user:<email> or "
+                "serviceAccount:<email> with a plain email"
+            )
+        if item.lower() in seen:
+            raise ValueError(f"{named}[{index}]: duplicate principal")
+        seen.add(item.lower())
+    return list(value)
+
+
 @dataclass
 class Deployment:
     project: str
@@ -108,6 +136,8 @@ class Datasets:
     ci_scratch: str = DEFAULT_DATASETS["ci_scratch"]
     ci_scratch_bq: str = DEFAULT_DATASETS["ci_scratch_bq"]
     marts_verify: str = DEFAULT_DATASETS["marts_verify"]
+    reporting: str = DEFAULT_DATASETS["reporting"]
+    reporting_verify: str = DEFAULT_DATASETS["reporting_verify"]
 
 
 @dataclass
@@ -140,7 +170,11 @@ class Config:
     api_version: str = DEFAULT_API_VERSION
     mcc: str | None = None
     timezone_override: str | None = None
-    checkpoint_start_date: str = DEFAULT_CHECKPOINT_START_DATE
+    storage: str = "window"
+    reporting_window_days: int = DEFAULT_REPORTING_WINDOW_DAYS
+    env: str = "prod"
+    editors: list[str] = field(default_factory=list, repr=False)
+    looker_service_agents: list[str] = field(default_factory=list, repr=False)
 
 
 def parse_config(
@@ -190,16 +224,49 @@ def parse_config(
     if bulk_expansion and mcc is None:
         raise ValueError("mcc: required when bulk_expansion is true")
 
+    storage = raw.get("storage", "window")
+    if storage not in ("window", "incremental"):
+        raise ValueError("storage: must be window or incremental")
+
+    reporting_window_days = raw.get(
+        "reporting_window_days", DEFAULT_REPORTING_WINDOW_DAYS
+    )
+    if (
+        isinstance(reporting_window_days, bool)
+        or not isinstance(reporting_window_days, int)
+        or reporting_window_days <= 0
+    ):
+        raise ValueError("reporting_window_days: must be a positive int")
+
+    env = raw.get("env", "prod")
+    if env not in ("prod", "verify", "parity", "ci"):
+        raise ValueError("env: must be prod, verify, parity, or ci")
+    editors = _as_principals(raw.get("editors", []), "editors")
+    looker_service_agents = _as_principals(
+        raw.get("looker_service_agents", []), "looker_service_agents"
+    )
+
     run = run_date or _utc_today()
-    if raw.get("start_date") in (None, ""):
-        start = run - timedelta(days=90)
-        checkpoint_start_date = DEFAULT_CHECKPOINT_START_DATE
-    else:
+    has_start_date = raw.get("start_date") not in (None, "")
+    configured_start: date | None = None
+    if has_start_date:
         try:
-            start = date.fromisoformat(str(raw["start_date"]))
+            configured_start = date.fromisoformat(str(raw["start_date"]))
         except ValueError as exc:
             raise ValueError("start_date: must be an ISO date (YYYY-MM-DD)") from exc
-        checkpoint_start_date = start.isoformat()
+
+    if storage == "window" or configured_start is None:
+        start = run - timedelta(days=reporting_window_days)
+        if storage == "incremental":
+            # Month-aligned so every chunk is complete; initial depth is between
+            # the reporting window and the reporting window plus 30 days.
+            start = start.replace(day=1)
+    else:
+        start = configured_start
+        if start.day != 1:
+            raise ValueError(
+                "start_date: must be the first day of a month in incremental mode"
+            )
 
     restatement = raw.get("restatement_margin_days", DEFAULT_RESTATEMENT_MARGIN_DAYS)
     if restatement is None:
@@ -208,6 +275,8 @@ def parse_config(
         raise ValueError("restatement_margin_days: must be an int")
     else:
         restatement_margin_days = restatement
+    if restatement_margin_days < 0:
+        raise ValueError("restatement_margin_days: must be non-negative")
 
     days_raw = raw.get("cohort_days")
     if days_raw in (None, ""):
@@ -282,28 +351,26 @@ def parse_config(
     ds_raw = raw.get("datasets") or {}
     if not isinstance(ds_raw, dict):
         raise ValueError("datasets: must be a mapping")
-    datasets = Datasets(
-        raw=str(ds_raw.get("raw") or DEFAULT_DATASETS["raw"]),
-        marts=str(ds_raw.get("marts") or DEFAULT_DATASETS["marts"]),
-        ops=str(ds_raw.get("ops") or DEFAULT_DATASETS["ops"]),
-        snapshots=str(ds_raw.get("snapshots") or DEFAULT_DATASETS["snapshots"]),
-        parity_scratch=str(
-            ds_raw.get("parity_scratch") or DEFAULT_DATASETS["parity_scratch"]
-        ),
-        parity_scratch_bq=str(
-            ds_raw.get("parity_scratch_bq") or DEFAULT_DATASETS["parity_scratch_bq"]
-        ),
-        ci_scratch=str(ds_raw.get("ci_scratch") or DEFAULT_DATASETS["ci_scratch"]),
-        ci_scratch_bq=str(
-            ds_raw.get("ci_scratch_bq") or DEFAULT_DATASETS["ci_scratch_bq"]
-        ),
-        marts_verify=str(
-            ds_raw.get("marts_verify") or DEFAULT_DATASETS["marts_verify"]
-        ),
-    )
-    dataset_values = {
-        field: getattr(datasets, field) for field in DEFAULT_DATASETS
-    }
+    dataset_values: dict[str, str] = {}
+    for field, default in DEFAULT_DATASETS.items():
+        configured = ds_raw.get(field)
+        if configured is not None and not isinstance(configured, str):
+            raise ValueError(
+                f"datasets.{field}: must be a string identifier, not "
+                f"{type(configured).__name__}"
+            )
+        value = default if configured is None else configured
+        # Dataset naming rule per docs.cloud.google.com/bigquery/docs/datasets
+        # ("Name datasets", read 2026-09-18 through the Developer Knowledge MCP):
+        # up to 1,024 characters; letters, numbers, and underscores; no spaces
+        # or special characters.
+        if not re.fullmatch(r"^[A-Za-z0-9_]{1,1024}$", value):
+            raise ValueError(
+                f"datasets.{field}: must be a BigQuery dataset identifier "
+                "of 1 to 1024 letters, numbers, or underscores"
+            )
+        dataset_values[field] = value
+    datasets = Datasets(**dataset_values)
     seen_datasets: dict[str, str] = {}
     for field, value in dataset_values.items():
         if value in seen_datasets:
@@ -342,6 +409,32 @@ def parse_config(
 
     api_version = str(raw.get("api_version") or DEFAULT_API_VERSION)
 
+    if reporting_window_days not in COHORT_BOUNDARY:
+        log.warning(
+            "reporting_window_days: %s is not a lag bucket boundary; campaign "
+            "and asset-group reporting-window rungs will be unavailable",
+            reporting_window_days,
+        )
+    minimum_window = max(cohort_days) + 1 + restatement_margin_days
+    if reporting_window_days < minimum_window:
+        log.warning(
+            "reporting_window_days: %s is below the largest cohort_days rung "
+            "plus one plus restatement_margin_days (%s); some cohort readings "
+            "will be unavailable",
+            reporting_window_days,
+            minimum_window,
+        )
+    if storage == "incremental" and not has_start_date:
+        log.warning(
+            "start_date: absent in incremental mode; using month-aligned "
+            "default %s, the first day of the month containing run date "
+            "minus reporting_window_days (%s days)",
+            start.isoformat(),
+            reporting_window_days,
+        )
+    elif storage == "window" and has_start_date:
+        log.warning("start_date: ignored in window mode")
+
     return Config(
         accounts=accounts,
         bulk_expansion=bulk_expansion,
@@ -355,7 +448,11 @@ def parse_config(
         api_version=api_version,
         mcc=mcc,
         timezone_override=timezone_override,
-        checkpoint_start_date=checkpoint_start_date,
+        storage=storage,
+        reporting_window_days=reporting_window_days,
+        env=env,
+        editors=editors,
+        looker_service_agents=looker_service_agents,
     )
 
 

@@ -6,7 +6,7 @@
 - Commit: `9790e8a585b6e6f76851efed3e9b42ad87d8d97c`
 - Commit author date: 2026-04-01T11:17:29Z
 - Copied scope: the ten GAQL inputs and BigQuery chain closure 01 to 05, 07,
-  09, and 10 listed in KTD6.
+  09, and 10.
 - Integrity hash: SHA-256
   `239226e4370d2e3f1f9d59473bca03ebdc3b52e0313200a3c0eeb719d9040528`
   over the copied files in harness execution order.

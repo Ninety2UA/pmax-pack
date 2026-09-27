@@ -12,6 +12,13 @@ capture_readonly PROJECT_NUMBER gcloud projects describe "$PROJECT" \
   --project="$PROJECT" --format="value(projectNumber)" --quiet
 [[ "$PROJECT_NUMBER" =~ ^[0-9]+$ ]] || die "could not resolve the numeric project id"
 
+# Walk ancestors so projects nested below folders also satisfy the organization proxy.
+capture_readonly PROJECT_ANCESTOR_TYPES gcloud projects get-ancestors "$PROJECT" \
+  --project="$PROJECT" --format="value(type)" --quiet
+if ! grep -qx organization <<<"$PROJECT_ANCESTOR_TYPES"; then
+  die "Looker service-account credentials require a parent organization"
+fi
+
 capture_readonly BILLING_ENABLED gcloud billing projects describe "$PROJECT" \
   --format="value(billingEnabled)" --quiet
 case "$BILLING_ENABLED" in
@@ -77,23 +84,38 @@ else
 fi
 echo "Config source: $CONFIG_SOURCE"
 
-uv run python - "$CONFIG_LOCAL" "$PHASE_STATE" <<'PY'
+resolve_ladder_image
+detect_first_deploy_continuation
+uv run python - "$CONFIG_LOCAL" "$PHASE_STATE" "$UPGRADE" "$FIRST_DEPLOY_CONTINUATION" <<'PY'
 from __future__ import annotations
 
 import shlex
 import sys
 from pathlib import Path
+import yaml
 
 from pmax_pack.config import load_config
+from pmax_pack.retention import confirmation_value
 
-source, destination = sys.argv[1:]
+source, destination, upgrade, continuation = sys.argv[1:]
+document = yaml.safe_load(Path(source).read_text(encoding="utf-8"))
+if upgrade == "1" and continuation != "1" and (not isinstance(document, dict) or "storage" not in document):
+    raise SystemExit("upgrade requires an explicit storage key: window or incremental")
 config = load_config(source)
+if upgrade == "0" and "storage" not in document:
+    # Persist the resolved default in the validated copy used by phase 65.
+    document["storage"] = config.storage
+    Path(source).write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    config = load_config(source)
 values = {
     "DEPLOYMENT_PROJECT": config.deployment.project,
     "DEPLOYMENT_REGION": config.deployment.region,
     "ACCOUNTS_CSV": ",".join(config.accounts),
     "BULK_EXPANSION": "1" if config.bulk_expansion else "0",
     "START_DATE": config.start_date.isoformat(),
+    "STORAGE": config.storage,
+    "REPORTING_WINDOW_DAYS": str(config.reporting_window_days),
+    "RETENTION_EXPECTED": confirmation_value(config),
     "ACCOUNT_TIMEZONE": config.timezone_override or "",
     "DATASET_RAW": config.datasets.raw,
     "DATASET_MARTS": config.datasets.marts,
@@ -104,6 +126,10 @@ values = {
     "DATASET_CI": config.datasets.ci_scratch,
     "DATASET_CI_BQ": config.datasets.ci_scratch_bq,
     "DATASET_VERIFY": config.datasets.marts_verify,
+    "DATASET_REPORTING": config.datasets.reporting,
+    "DATASET_REPORTING_VERIFY": config.datasets.reporting_verify,
+    "DATASETS_CSV": ",".join(dict.fromkeys(vars(config.datasets).values())),
+    "PMAX_ENV": config.env,
     "REPORT_BUCKET": config.buckets.report_bucket,
     "CONFIG_BUCKET": config.buckets.config_bucket,
 }
@@ -128,7 +154,53 @@ export DEPLOYMENT_PROJECT DEPLOYMENT_REGION ACCOUNTS_CSV BULK_EXPANSION START_DA
 export ACCOUNT_TIMEZONE DATASET_RAW DATASET_MARTS DATASET_OPS DATASET_SNAPSHOTS
 export DATASET_PARITY DATASET_PARITY_BQ DATASET_CI DATASET_CI_BQ DATASET_VERIFY
 export REPORT_BUCKET CONFIG_BUCKET OPERATOR_IDENTITY CONFIG_SOURCE
-export PROJECT_NUMBER
+export PROJECT_NUMBER DATASET_REPORTING DATASET_REPORTING_VERIFY DATASETS_CSV PMAX_ENV
+export STORAGE REPORTING_WINDOW_DAYS RETENTION_EXPECTED
+echo "Storage mode: $STORAGE; PMAX_RETENTION_CONFIRMED=$RETENTION_EXPECTED"
+
+validate_alert_preflight
+
+if [[ -n "${PMAX_SIGNED_REVIEW:-}" ]]; then
+  [[ "${PMAX_RETENTION_CONFIRMED:-}" == "$RETENTION_EXPECTED" ]] || \
+    die "signed pass requires PMAX_RETENTION_CONFIRMED=$RETENTION_EXPECTED"
+  [[ -n "${PMAX_NOTIFICATION_CHANNEL:-}" ]] || die "signed pass requires PMAX_NOTIFICATION_CHANNEL"
+  if [[ ! -t 0 ]]; then
+    case ",${PMAX_CONFIRMED_PHASES:-}," in
+      *",89-retention,"*) ;;
+      *) die "signed pass requires 89-retention in PMAX_CONFIRMED_PHASES off a TTY" ;;
+    esac
+  fi
+  [[ -f "$PMAX_SIGNED_REVIEW" ]] || die "PMAX_SIGNED_REVIEW must name the operator-signed YAML review"
+  if [[ "$ANCHOR_REHEARSAL_REQUIRED" -eq 1 ]]; then
+  [[ -f "${PMAX_ANCHOR_CHECKOUT:-}/src/pmax_pack/manifest.yaml" && \
+     -f "${PMAX_ANCHOR_CHECKOUT:-}/src/pmax_pack/cli.py" && \
+     -f "${PMAX_ANCHOR_CHECKOUT:-}/pyproject.toml" ]] || \
+    die "signed pass requires PMAX_ANCHOR_CHECKOUT pointing to the anchor product root"
+  PMAX_ANCHOR_CONFIG="${PMAX_ANCHOR_CONFIG:-$ROOT/deployments/$PROJECT/config-pre-v2.1.0.yaml}"
+  [[ -f "$PMAX_ANCHOR_CONFIG" ]] || die "signed pass requires PMAX_ANCHOR_CONFIG saved before the upgrade"
+  verify_anchor_checkout
+  uv run python - "$CONFIG_LOCAL" "$PMAX_ANCHOR_CONFIG" <<'PY_ANCHOR_PREFLIGHT'
+from pathlib import Path
+import sys
+import yaml
+from pmax_pack.config import load_config
+
+current = load_config(sys.argv[1])
+saved = yaml.safe_load(Path(sys.argv[2]).read_text())
+if not isinstance(saved, dict) or 0 in saved.get("cohort_days", []):
+    raise SystemExit("anchor config must be the saved pre-upgrade config without cohort_days=0")
+anchor = load_config(sys.argv[2])
+if anchor.deployment.project != current.deployment.project:
+    raise SystemExit("anchor config deployment.project mismatch")
+for key in ("raw", "ops", "marts_verify"):
+    if getattr(anchor.datasets, key) != getattr(current.datasets, key):
+        raise SystemExit(f"anchor config datasets.{key} mismatch")
+if anchor.accounts != current.accounts:
+    raise SystemExit("anchor config accounts mismatch")
+PY_ANCHOR_PREFLIGHT
+  export PMAX_ANCHOR_CONFIG
+  fi
+fi
 
 echo "Credential scope: every allowlisted account must resolve under the configured login manager."
 echo "Extraction bound: the deployed config accounts list is the only extraction bound."

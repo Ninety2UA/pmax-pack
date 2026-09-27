@@ -13,7 +13,7 @@
           "type": "text"
         },
         {
-          "id": "edge-4-scheduler-cloud-run",
+          "id": "edge-0-scheduler-cloud-run",
           "type": "arrow"
         }
       ],
@@ -52,14 +52,14 @@
           "type": "text"
         },
         {
-          "id": "edge-0-ads-api-cloud-run",
+          "id": "edge-1-ads-api-cloud-run",
           "type": "arrow"
         }
       ],
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 84,
+      "height": 88,
       "id": "ads-api",
       "index": "a1",
       "isDeleted": false,
@@ -78,7 +78,7 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 44557014,
-      "width": 216,
+      "width": 288,
       "x": 70,
       "y": 260
     },
@@ -91,19 +91,23 @@
           "type": "text"
         },
         {
-          "id": "edge-0-ads-api-cloud-run",
+          "id": "edge-0-scheduler-cloud-run",
           "type": "arrow"
         },
         {
-          "id": "edge-1-cloud-run-raw",
+          "id": "edge-1-ads-api-cloud-run",
           "type": "arrow"
         },
         {
-          "id": "edge-4-scheduler-cloud-run",
+          "id": "edge-2-secret-cloud-run",
           "type": "arrow"
         },
         {
-          "id": "edge-5-secret-cloud-run",
+          "id": "edge-3-cloud-run-raw",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-4-cloud-run-report",
           "type": "arrow"
         }
       ],
@@ -129,7 +133,7 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1576510488,
-      "width": 252,
+      "width": 276,
       "x": 410,
       "y": 260
     },
@@ -142,11 +146,11 @@
           "type": "text"
         },
         {
-          "id": "edge-1-cloud-run-raw",
+          "id": "edge-3-cloud-run-raw",
           "type": "arrow"
         },
         {
-          "id": "edge-2-raw-marts",
+          "id": "edge-5-raw-marts",
           "type": "arrow"
         }
       ],
@@ -172,7 +176,7 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1547038806,
-      "width": 200,
+      "width": 252,
       "x": 750,
       "y": 260
     },
@@ -185,7 +189,7 @@
           "type": "text"
         },
         {
-          "id": "edge-5-secret-cloud-run",
+          "id": "edge-2-secret-cloud-run",
           "type": "arrow"
         }
       ],
@@ -211,51 +215,8 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1020059901,
-      "width": 252,
-      "x": 410,
-      "y": 450
-    },
-    {
-      "angle": 0,
-      "backgroundColor": "#F4F4F5",
-      "boundElements": [
-        {
-          "id": "marts-label",
-          "type": "text"
-        },
-        {
-          "id": "edge-2-raw-marts",
-          "type": "arrow"
-        },
-        {
-          "id": "edge-3-marts-report",
-          "type": "arrow"
-        }
-      ],
-      "fillStyle": "solid",
-      "frameId": null,
-      "groupIds": [],
-      "height": 144,
-      "id": "marts",
-      "index": "a5",
-      "isDeleted": false,
-      "link": null,
-      "locked": false,
-      "opacity": 100,
-      "roughness": 1,
-      "roundness": {
-        "type": 3
-      },
-      "seed": 2034103254,
-      "strokeColor": "#52525B",
-      "strokeStyle": "solid",
-      "strokeWidth": 2,
-      "type": "rectangle",
-      "updated": 1,
-      "version": 1,
-      "versionNonce": 885717561,
       "width": 216,
-      "x": 750,
+      "x": 70,
       "y": 450
     },
     {
@@ -267,7 +228,7 @@
           "type": "text"
         },
         {
-          "id": "edge-3-marts-report",
+          "id": "edge-4-cloud-run-report",
           "type": "arrow"
         }
       ],
@@ -276,7 +237,7 @@
       "groupIds": [],
       "height": 116,
       "id": "report",
-      "index": "a6",
+      "index": "a5",
       "isDeleted": false,
       "link": null,
       "locked": false,
@@ -293,7 +254,132 @@
       "updated": 1,
       "version": 1,
       "versionNonce": 1073810285,
-      "width": 252,
+      "width": 240,
+      "x": 410,
+      "y": 450
+    },
+    {
+      "angle": 0,
+      "backgroundColor": "#F4F4F5",
+      "boundElements": [
+        {
+          "id": "marts-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-5-raw-marts",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-6-marts-reporting",
+          "type": "arrow"
+        }
+      ],
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 88,
+      "id": "marts",
+      "index": "a6",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "roughness": 1,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 2034103254,
+      "strokeColor": "#52525B",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "type": "rectangle",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 885717561,
+      "width": 288,
+      "x": 750,
+      "y": 450
+    },
+    {
+      "angle": 0,
+      "backgroundColor": "#FEF3C7",
+      "boundElements": [
+        {
+          "id": "looker-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-7-reporting-looker",
+          "type": "arrow"
+        }
+      ],
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 116,
+      "id": "looker",
+      "index": "a7",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "roughness": 1,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 248007619,
+      "strokeColor": "#B45309",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "type": "rectangle",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 1499523946,
+      "width": 276,
+      "x": 410,
+      "y": 640
+    },
+    {
+      "angle": 0,
+      "backgroundColor": "#D1FAE5",
+      "boundElements": [
+        {
+          "id": "reporting-label",
+          "type": "text"
+        },
+        {
+          "id": "edge-6-marts-reporting",
+          "type": "arrow"
+        },
+        {
+          "id": "edge-7-reporting-looker",
+          "type": "arrow"
+        }
+      ],
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 116,
+      "id": "reporting",
+      "index": "a8",
+      "isDeleted": false,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "roughness": 1,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 2122149091,
+      "strokeColor": "#047857",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "type": "rectangle",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 1660845701,
+      "width": 264,
       "x": 750,
       "y": 640
     },
@@ -310,7 +396,7 @@
       "groupIds": [],
       "height": 75.0,
       "id": "scheduler-label",
-      "index": "a7",
+      "index": "a9",
       "isDeleted": false,
       "lineHeight": 1.25,
       "link": null,
@@ -345,31 +431,31 @@
       "fontSize": 20,
       "frameId": null,
       "groupIds": [],
-      "height": 25.0,
+      "height": 50.0,
       "id": "ads-api-label",
-      "index": "a8",
+      "index": "aA",
       "isDeleted": false,
       "lineHeight": 1.25,
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "Google Ads API",
+      "originalText": "Google Ads API\nallowlisted accounts",
       "roughness": 1,
       "roundness": null,
       "seed": 70838871,
       "strokeColor": "#1971C2",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "Google Ads API",
+      "text": "Google Ads API\nallowlisted accounts",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 780684438,
       "verticalAlign": "middle",
-      "width": 168.0,
+      "width": 240.0,
       "x": 94.0,
-      "y": 289.5
+      "y": 279.0
     },
     {
       "angle": 0,
@@ -384,27 +470,27 @@
       "groupIds": [],
       "height": 75.0,
       "id": "cloud-run-label",
-      "index": "a9",
+      "index": "aB",
       "isDeleted": false,
       "lineHeight": 1.25,
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "One Cloud Run Job\nimage pinned\nby digest",
+      "originalText": "One Cloud Run Job\ndigest-pinned image\nlease: one writer",
       "roughness": 1,
       "roundness": null,
       "seed": 108940396,
       "strokeColor": "#047857",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "One Cloud Run Job\nimage pinned\nby digest",
+      "text": "One Cloud Run Job\ndigest-pinned image\nlease: one writer",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 520217364,
       "verticalAlign": "middle",
-      "width": 204.0,
+      "width": 228.0,
       "x": 434.0,
       "y": 280.5
     },
@@ -421,28 +507,28 @@
       "groupIds": [],
       "height": 75.0,
       "id": "raw-label",
-      "index": "aA",
+      "index": "aC",
       "isDeleted": false,
       "lineHeight": 1.25,
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "BigQuery raw\nlanded GAQL\nfamilies",
+      "originalText": "pmax_raw\nfacts + snapshots\nobservation diary",
       "roughness": 1,
       "roundness": null,
       "seed": 786579934,
       "strokeColor": "#52525B",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "BigQuery raw\nlanded GAQL\nfamilies",
+      "text": "pmax_raw\nfacts + snapshots\nobservation diary",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 977710521,
       "verticalAlign": "middle",
-      "width": 144.0,
-      "x": 778.0,
+      "width": 204.0,
+      "x": 774.0,
       "y": 280.5
     },
     {
@@ -458,66 +544,29 @@
       "groupIds": [],
       "height": 75.0,
       "id": "secret-label",
-      "index": "aB",
+      "index": "aD",
       "isDeleted": false,
       "lineHeight": 1.25,
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "Pinned secret\nversion + private\nYAML config",
+      "originalText": "Private config\npinned secret\nversion",
       "roughness": 1,
       "roundness": null,
       "seed": 652516158,
       "strokeColor": "#7E22CE",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "Pinned secret\nversion + private\nYAML config",
+      "text": "Private config\npinned secret\nversion",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 449071387,
       "verticalAlign": "middle",
-      "width": 204.0,
-      "x": 434.0,
-      "y": 470.5
-    },
-    {
-      "angle": 0,
-      "autoResize": true,
-      "backgroundColor": "transparent",
-      "boundElements": null,
-      "containerId": "marts",
-      "fillStyle": "solid",
-      "fontFamily": 5,
-      "fontSize": 20,
-      "frameId": null,
-      "groupIds": [],
-      "height": 100.0,
-      "id": "marts-label",
-      "index": "aC",
-      "isDeleted": false,
-      "lineHeight": 1.25,
-      "link": null,
-      "locked": false,
-      "opacity": 100,
-      "originalText": "Staging +\nintermediates\nadditive marts\n+ views",
-      "roughness": 1,
-      "roundness": null,
-      "seed": 1912736815,
-      "strokeColor": "#52525B",
-      "strokeStyle": "solid",
-      "strokeWidth": 1,
-      "text": "Staging +\nintermediates\nadditive marts\n+ views",
-      "textAlign": "center",
-      "type": "text",
-      "updated": 1,
-      "version": 1,
-      "versionNonce": 1889570686,
-      "verticalAlign": "middle",
       "width": 168.0,
-      "x": 774.0,
-      "y": 472.0
+      "x": 94.0,
+      "y": 470.5
     },
     {
       "angle": 0,
@@ -532,27 +581,138 @@
       "groupIds": [],
       "height": 75.0,
       "id": "report-label",
-      "index": "aD",
+      "index": "aE",
       "isDeleted": false,
       "lineHeight": 1.25,
       "link": null,
       "locked": false,
       "opacity": 100,
-      "originalText": "Validation report\n+ observation\nbackup",
+      "originalText": "Run report +\nAvro observation\nbackup",
       "roughness": 1,
       "roundness": null,
       "seed": 1818315262,
       "strokeColor": "#B45309",
       "strokeStyle": "solid",
       "strokeWidth": 1,
-      "text": "Validation report\n+ observation\nbackup",
+      "text": "Run report +\nAvro observation\nbackup",
       "textAlign": "center",
       "type": "text",
       "updated": 1,
       "version": 1,
       "versionNonce": 23727737,
       "verticalAlign": "middle",
-      "width": 204.0,
+      "width": 192.0,
+      "x": 434.0,
+      "y": 470.5
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "marts",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 50.0,
+      "id": "marts-label",
+      "index": "aF",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "pmax_marts\ntransform + validate",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1912736815,
+      "strokeColor": "#52525B",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "pmax_marts\ntransform + validate",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 1889570686,
+      "verticalAlign": "middle",
+      "width": 240.0,
+      "x": 774.0,
+      "y": 469.0
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "looker",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 75.0,
+      "id": "looker-label",
+      "index": "aG",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "Looker Studio\ndedicated account\nreporting read only",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1638417554,
+      "strokeColor": "#B45309",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "Looker Studio\ndedicated account\nreporting read only",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 1172564487,
+      "verticalAlign": "middle",
+      "width": 228.0,
+      "x": 434.0,
+      "y": 660.5
+    },
+    {
+      "angle": 0,
+      "autoResize": true,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "containerId": "reporting",
+      "fillStyle": "solid",
+      "fontFamily": 5,
+      "fontSize": 20,
+      "frameId": null,
+      "groupIds": [],
+      "height": 75.0,
+      "id": "reporting-label",
+      "index": "aH",
+      "isDeleted": false,
+      "lineHeight": 1.25,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "originalText": "pmax_reporting\neight tables\none publish commit",
+      "roughness": 1,
+      "roundness": null,
+      "seed": 177045448,
+      "strokeColor": "#047857",
+      "strokeStyle": "solid",
+      "strokeWidth": 1,
+      "text": "pmax_reporting\neight tables\none publish commit",
+      "textAlign": "center",
+      "type": "text",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 1320581078,
+      "verticalAlign": "middle",
+      "width": 215.99999999999997,
       "x": 774.0,
       "y": 660.5
     },
@@ -571,9 +731,9 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 4.827528743123594,
-      "id": "edge-0-ads-api-cloud-run",
-      "index": "aE",
+      "height": 58.07132082944088,
+      "id": "edge-0-scheduler-cloud-run",
+      "index": "aI",
       "isDeleted": false,
       "lastCommittedPoint": null,
       "link": null,
@@ -585,13 +745,67 @@
           0
         ],
         [
-          108.01595562739112,
-          4.827528743123594
+          5.5014935522629,
+          58.07132082944088
         ]
       ],
       "roughness": 1,
       "roundness": null,
-      "seed": 234044040,
+      "seed": 1582425240,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "scheduler",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "strokeColor": "#047857",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "type": "arrow",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 621411001,
+      "width": 5.5014935522629,
+      "x": 536.2492532238685,
+      "y": 193.96433958527956
+    },
+    {
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
+      "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "cloud-run",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 1.5095704226640123,
+      "id": "edge-1-ads-api-cloud-run",
+      "index": "aJ",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          36.014037226411574,
+          1.5095704226640123
+        ]
+      ],
+      "roughness": 1,
+      "roundness": null,
+      "seed": 215375791,
       "startArrowhead": null,
       "startBinding": {
         "elementId": "ads-api",
@@ -605,10 +819,64 @@
       "type": "arrow",
       "updated": 1,
       "version": 1,
-      "versionNonce": 946685955,
-      "width": 108.01595562739112,
-      "x": 293.99202218630444,
-      "y": 307.1840009915667
+      "versionNonce": 501667853,
+      "width": 36.014037226411574,
+      "x": 365.9929813867942,
+      "y": 310.370963291662
+    },
+    {
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
+      "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "cloud-run",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 69.2316655806585,
+      "id": "edge-2-secret-cloud-run",
+      "index": "aK",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          134.81955928865074,
+          -69.2316655806585
+        ]
+      ],
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1746739615,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "secret",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "strokeColor": "#71717A",
+      "strokeStyle": "dashed",
+      "strokeWidth": 2,
+      "type": "arrow",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 1004217311,
+      "width": 134.81955928865074,
+      "x": 293.1165361451483,
+      "y": 448.8861030605995
     },
     {
       "angle": 0,
@@ -626,8 +894,8 @@
       "frameId": null,
       "groupIds": [],
       "height": 0.0,
-      "id": "edge-1-cloud-run-raw",
-      "index": "aF",
+      "id": "edge-3-cloud-run-raw",
+      "index": "aL",
       "isDeleted": false,
       "lastCommittedPoint": null,
       "link": null,
@@ -639,13 +907,13 @@
           0
         ],
         [
-          72,
+          48,
           0
         ]
       ],
       "roughness": 1,
       "roundness": null,
-      "seed": 1818595998,
+      "seed": 648799250,
       "startArrowhead": null,
       "startBinding": {
         "elementId": "cloud-run",
@@ -659,64 +927,10 @@
       "type": "arrow",
       "updated": 1,
       "version": 1,
-      "versionNonce": 1289251834,
-      "width": 72.0,
-      "x": 670,
+      "versionNonce": 672950919,
+      "width": 48.0,
+      "x": 694,
       "y": 318
-    },
-    {
-      "angle": 0,
-      "backgroundColor": "transparent",
-      "boundElements": null,
-      "elbowed": false,
-      "endArrowhead": "arrow",
-      "endBinding": {
-        "elementId": "marts",
-        "fixedPoint": null,
-        "focus": 0,
-        "gap": 1
-      },
-      "fillStyle": "solid",
-      "frameId": null,
-      "groupIds": [],
-      "height": 58.012288788295336,
-      "id": "edge-2-raw-marts",
-      "index": "aG",
-      "isDeleted": false,
-      "lastCommittedPoint": null,
-      "link": null,
-      "locked": false,
-      "opacity": 100,
-      "points": [
-        [
-          0,
-          0
-        ],
-        [
-          2.2749917171880725,
-          58.012288788295336
-        ]
-      ],
-      "roughness": 1,
-      "roundness": null,
-      "seed": 218329537,
-      "startArrowhead": null,
-      "startBinding": {
-        "elementId": "raw",
-        "fixedPoint": null,
-        "focus": 0,
-        "gap": 1
-      },
-      "strokeColor": "#047857",
-      "strokeStyle": "solid",
-      "strokeWidth": 2,
-      "type": "arrow",
-      "updated": 1,
-      "version": 1,
-      "versionNonce": 938295676,
-      "width": 2.2749917171880725,
-      "x": 852.5879943374844,
-      "y": 383.99385560585233
     },
     {
       "angle": 0,
@@ -733,9 +947,9 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 30.083026922530735,
-      "id": "edge-3-marts-report",
-      "index": "aH",
+      "height": 58.07132082944088,
+      "id": "edge-4-cloud-run-report",
+      "index": "aM",
       "isDeleted": false,
       "lastCommittedPoint": null,
       "link": null,
@@ -747,13 +961,121 @@
           0
         ],
         [
-          3.0766732079861185,
-          30.083026922530735
+          -5.5014935522629,
+          58.07132082944088
         ]
       ],
       "roughness": 1,
       "roundness": null,
-      "seed": 1853634871,
+      "seed": 406426691,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "cloud-run",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "strokeColor": "#047857",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "type": "arrow",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 877566357,
+      "width": 5.5014935522629,
+      "x": 541.7507467761315,
+      "y": 383.96433958527956
+    },
+    {
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
+      "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "marts",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 58.083026922530735,
+      "id": "edge-5-raw-marts",
+      "index": "aN",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          5.9403095716224925,
+          58.083026922530735
+        ]
+      ],
+      "roughness": 1,
+      "roundness": null,
+      "seed": 1895467444,
+      "startArrowhead": null,
+      "startBinding": {
+        "elementId": "raw",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "strokeColor": "#047857",
+      "strokeStyle": "solid",
+      "strokeWidth": 2,
+      "type": "arrow",
+      "updated": 1,
+      "version": 1,
+      "versionNonce": 394214711,
+      "width": 5.9403095716224925,
+      "x": 882.7457543050979,
+      "y": 383.95848653873463
+    },
+    {
+      "angle": 0,
+      "backgroundColor": "transparent",
+      "boundElements": null,
+      "elbowed": false,
+      "endArrowhead": "arrow",
+      "endBinding": {
+        "elementId": "reporting",
+        "fixedPoint": null,
+        "focus": 0,
+        "gap": 1
+      },
+      "fillStyle": "solid",
+      "frameId": null,
+      "groupIds": [],
+      "height": 86.0276100292001,
+      "id": "edge-6-marts-reporting",
+      "index": "aO",
+      "isDeleted": false,
+      "lastCommittedPoint": null,
+      "link": null,
+      "locked": false,
+      "opacity": 100,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -5.060447648776517,
+          86.0276100292001
+        ]
+      ],
+      "roughness": 1,
+      "roundness": null,
+      "seed": 964149744,
       "startArrowhead": null,
       "startBinding": {
         "elementId": "marts",
@@ -767,10 +1089,10 @@
       "type": "arrow",
       "updated": 1,
       "version": 1,
-      "versionNonce": 1666214173,
-      "width": 3.0766732079861185,
-      "x": 866.177572486916,
-      "y": 601.9584865387346
+      "versionNonce": 1720137206,
+      "width": 5.060447648776517,
+      "x": 890.9419885302706,
+      "y": 545.9861949854
     },
     {
       "angle": 0,
@@ -779,7 +1101,7 @@
       "elbowed": false,
       "endArrowhead": "arrow",
       "endBinding": {
-        "elementId": "cloud-run",
+        "elementId": "looker",
         "fixedPoint": null,
         "focus": 0,
         "gap": 1
@@ -787,9 +1109,9 @@
       "fillStyle": "solid",
       "frameId": null,
       "groupIds": [],
-      "height": 58.00797187748435,
-      "id": "edge-4-scheduler-cloud-run",
-      "index": "aI",
+      "height": 0.0,
+      "id": "edge-7-reporting-looker",
+      "index": "aP",
       "isDeleted": false,
       "lastCommittedPoint": null,
       "link": null,
@@ -801,70 +1123,16 @@
           0
         ],
         [
-          1.8318306908678323,
-          58.00797187748435
-        ]
-      ],
-      "roughness": 1,
-      "roundness": null,
-      "seed": 1959096902,
-      "startArrowhead": null,
-      "startBinding": {
-        "elementId": "scheduler",
-        "fixedPoint": null,
-        "focus": 0,
-        "gap": 1
-      },
-      "strokeColor": "#047857",
-      "strokeStyle": "solid",
-      "strokeWidth": 2,
-      "type": "arrow",
-      "updated": 1,
-      "version": 1,
-      "versionNonce": 1145606652,
-      "width": 1.8318306908678323,
-      "x": 532.084084654566,
-      "y": 193.99601406125782
-    },
-    {
-      "angle": 0,
-      "backgroundColor": "transparent",
-      "boundElements": null,
-      "elbowed": false,
-      "endArrowhead": "arrow",
-      "endBinding": {
-        "elementId": "cloud-run",
-        "fixedPoint": null,
-        "focus": 0,
-        "gap": 1
-      },
-      "fillStyle": "solid",
-      "frameId": null,
-      "groupIds": [],
-      "height": 58.0,
-      "id": "edge-5-secret-cloud-run",
-      "index": "aJ",
-      "isDeleted": false,
-      "lastCommittedPoint": null,
-      "link": null,
-      "locked": false,
-      "opacity": 100,
-      "points": [
-        [
-          0,
+          -48,
           0
-        ],
-        [
-          0,
-          -58
         ]
       ],
       "roughness": 1,
       "roundness": null,
-      "seed": 514111793,
+      "seed": 1473938623,
       "startArrowhead": null,
       "startBinding": {
-        "elementId": "secret",
+        "elementId": "reporting",
         "fixedPoint": null,
         "focus": 0,
         "gap": 1
@@ -875,10 +1143,10 @@
       "type": "arrow",
       "updated": 1,
       "version": 1,
-      "versionNonce": 180556968,
-      "width": 0.0,
-      "x": 536,
-      "y": 442
+      "versionNonce": 9094322,
+      "width": 48.0,
+      "x": 742,
+      "y": 698
     }
   ],
   "files": {},

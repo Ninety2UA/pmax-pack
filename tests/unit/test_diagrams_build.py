@@ -1,4 +1,4 @@
-"""Fixture tests for build.py's scene QA and native-conversion invariants."""
+"""Offline scene contracts, layout QA, and native-conversion invariants."""
 
 from __future__ import annotations
 
@@ -115,3 +115,102 @@ def test_native_scene_rejects_unbound_arrows():
     arrow["startBinding"] = None
     with pytest.raises(build.CanvasError):
         build._assert_native_scene(native)
+
+
+# These paths are the documentation's data-access and control-flow contracts.
+# In particular, Looker can only read reporting, and validation precedes publish.
+REQUIRED_CONNECTIONS = {
+    "architecture": {
+        ("scheduler", "cloud-run", False),
+        ("ads-api", "cloud-run", False),
+        ("secret", "cloud-run", True),
+        ("cloud-run", "raw", False),
+        ("cloud-run", "report", False),
+        ("raw", "marts", False),
+        ("marts", "reporting", False),
+        ("reporting", "looker", False),
+    },
+    "data-model": {
+        ("api", "raw", False),
+        ("raw", "staging", False),
+        ("staging", "intermediate", False),
+        ("intermediate", "marts", False),
+        ("marts", "reporting", False),
+        ("reporting", "looker", False),
+        ("reference", "rules", True),
+        ("rules", "marts", True),
+    },
+    "cohort-mechanism": {
+        ("lag", "prefix", False),
+        ("prefix", "bucket-cells", False),
+        ("observations", "snapshot", False),
+        ("snapshot", "asset-cells", False),
+        ("bucket-cells", "contract", False),
+        ("asset-cells", "contract", False),
+        ("contract", "cohort-marts", False),
+        ("cohort-marts", "reporting", False),
+        ("reporting", "ratios", False),
+    },
+    "daily-run": {
+        ("scheduler", "extract", False),
+        ("extract", "observe", False),
+        ("observe", "backfill", False),
+        ("backfill", "transform", False),
+        ("transform", "validate", False),
+        ("validate", "publish", False),
+        ("publish", "report", False),
+        ("validate", "report", True),
+        ("report", "previous", True),
+    },
+    "storage-tiers": {
+        ("window", "working", False),
+        ("incremental", "working", False),
+        ("incremental", "history", False),
+        ("diary", "working", False),
+        ("working", "reporting", False),
+        ("reporting", "looker", False),
+        ("diary", "warning", True),
+    },
+    "upgrade-sequence": {
+        ("prepare", "pass1", False),
+        ("pass1", "review", False),
+        ("review", "pass2", False),
+        ("pass2", "retention", False),
+        ("retention", "resume", False),
+        ("retention", "rollback", True),
+        ("rollback", "frozen", True),
+    },
+}
+
+
+def test_real_scene_catalog_has_all_six_diagrams():
+    assert {diagram.name for diagram in build.DIAGRAMS} == set(REQUIRED_CONNECTIONS)
+    assert len(build.DIAGRAMS) == len(REQUIRED_CONNECTIONS)
+
+
+@pytest.mark.parametrize("diagram", build.DIAGRAMS, ids=lambda diagram: diagram.name)
+def test_real_scene_contract_layout_and_native_conversion(diagram):
+    expected = REQUIRED_CONNECTIONS[diagram.name]
+    node_ids = {node.id for node in diagram.nodes}
+    assert node_ids == {
+        node for source, target, _ in expected for node in (source, target)
+    }
+    assert len(node_ids) == len(diagram.nodes)
+    connections = {(edge.source, edge.target, edge.dashed) for edge in diagram.edges}
+    assert connections == expected
+    assert len(connections) == len(diagram.edges)
+
+    elements = build._elements(diagram)
+    build._qa_grid(diagram, elements)
+    # Supply only the arrow geometry normally materialized by the canvas.
+    # The bindings, labels, nodes, and edges all come from the real scene.
+    for element in elements:
+        if element["type"] == "arrow":
+            element.setdefault("x", 0)
+            element.setdefault("y", 0)
+            element.setdefault("points", [[0, 0], [120, 0]])
+    native = build._native_scene_elements(elements)
+    build._assert_native_scene(native)
+    assert sum(element["type"] == "rectangle" for element in native) == len(node_ids)
+    assert sum(element["type"] == "text" for element in native) == len(node_ids)
+    assert sum(element["type"] == "arrow" for element in native) == len(connections)

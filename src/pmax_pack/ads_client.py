@@ -1,11 +1,12 @@
 """Google Ads client construction, account resolution, and retried fetches.
 
-gaarf is the extractor only (KTD1). Credentials are a path, never in-repo.
+gaarf is the extractor only. Credentials are a path, never in-repo.
 Path precedence matches env-first: GOOGLE_ADS_CONFIGURATION_FILE_PATH, else
 the Cloud Run mount at /secrets/google-ads.yaml.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import logging
 import operator
@@ -119,7 +120,7 @@ class AccountResolutionError(Exception):
 
 
 class AccountExtractionError(Exception):
-    """Extraction failed for a single named account (R19)."""
+    """Extraction failed for a single named account."""
 
     def __init__(self, account: str, cause: BaseException | None = None):
         self.account = str(account)
@@ -148,7 +149,7 @@ def resolve_credential_path(credential_path: str | None = None) -> str:
 
 
 def credential_fingerprint(path: str) -> str:
-    """First 12 hex chars of sha256 over the credential file bytes (KTD5)."""
+    """First 12 hex chars of sha256 over the credential file bytes."""
     data = PathBytes(path)
     return hashlib.sha256(data).hexdigest()[:12]
 
@@ -159,7 +160,7 @@ def PathBytes(path: str) -> bytes:
 
 
 def build_client(credential_path: str | None, api_version: str) -> GoogleAdsApiClient:
-    """Construct a gaarf GoogleAdsApiClient pinned to api_version (KTD12)."""
+    """Construct a gaarf GoogleAdsApiClient pinned to api_version."""
     path = resolve_credential_path(credential_path)
     log.info("building Google Ads client api_version=%s", api_version)
     try:
@@ -171,6 +172,18 @@ def build_client(credential_path: str | None, api_version: str) -> GoogleAdsApiC
 
 def _report_fetcher(client: Any) -> AdsReportFetcher:
     return AdsReportFetcher(api_client=client)
+
+
+def worker_fetcher(fetcher: Any) -> Any:
+    """Give a pool worker its own parser state and reuse the API transport.
+
+    The report fetcher's parse hook is instance state. A separate instance
+    per worker keeps the temporary composite-field patch isolated. Injected
+    test adapters are shallow-copied so their recording sinks stay shared.
+    """
+    if isinstance(fetcher, AdsReportFetcher):
+        return AdsReportFetcher(api_client=fetcher.api_client, parallel_threshold=1)
+    return copy.copy(fetcher)
 
 
 def probe(credential_path: str | None, account: str, api_version: str) -> dict[str, Any]:
@@ -199,7 +212,7 @@ def _as_customer_id(value: Any) -> str:
 
 
 def resolve_accounts(config: Config, fetcher: Any) -> AccountResolution:
-    """Allowlist by default; MCC expand when bulk_expansion is true (R1)."""
+    """Allowlist by default; MCC expand when bulk_expansion is true."""
     configured = [_as_customer_id(a) for a in config.accounts]
     if not config.bulk_expansion:
         return AccountResolution(configured=configured, resolved=list(configured))

@@ -91,80 +91,398 @@ steps:
     partition_field: click_date
     clustering_fields: [account_id, campaign_id, asset_id, metric_basis]
 
-  - name: stg_performance
-    kind: table
-    sql: stg/stg_performance.sql
+  - name: stg_volume_campaign
+    kind: ddl
+    sql: stg/stg_volume_campaign_ddl.sql
     depends_on: []
     partition_field: date
     clustering_fields: [account_id, campaign_id]
-  - name: stg_entities
+  - name: build_stg_volume_campaign
     kind: table
-    sql: stg/stg_entities.sql
+    sql: stg/stg_volume_campaign.sql
+    depends_on: [stg_volume_campaign]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id]
+  - name: stg_volume_asset_group
+    kind: ddl
+    sql: stg/stg_volume_asset_group_ddl.sql
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: build_stg_volume_asset_group
+    kind: table
+    sql: stg/stg_volume_asset_group.sql
+    depends_on: [stg_volume_asset_group]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: stg_volume_asset
+    kind: ddl
+    sql: stg/stg_volume_asset_ddl.sql
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: build_stg_volume_asset
+    kind: table
+    sql: stg/stg_volume_asset.sql
+    depends_on: [stg_volume_asset]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: stg_conv_campaign
+    kind: ddl
+    sql: stg/stg_conv_campaign_ddl.sql
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id]
+  - name: build_stg_conv_campaign
+    kind: table
+    sql: stg/stg_conv_campaign.sql
+    depends_on: [stg_conv_campaign]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id]
+  - name: stg_conv_asset_group
+    kind: ddl
+    sql: stg/stg_conv_asset_group_ddl.sql
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: build_stg_conv_asset_group
+    kind: table
+    sql: stg/stg_conv_asset_group.sql
+    depends_on: [stg_conv_asset_group]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: stg_conv_asset
+    kind: ddl
+    sql: stg/stg_conv_asset_ddl.sql
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: build_stg_conv_asset
+    kind: table
+    sql: stg/stg_conv_asset.sql
+    depends_on: [stg_conv_asset]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: stg_lag_campaign
+    kind: ddl
+    sql: stg/stg_lag_campaign_ddl.sql
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id]
+  - name: build_stg_lag_campaign
+    kind: table
+    sql: stg/stg_lag_campaign.sql
+    depends_on: [stg_lag_campaign]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id]
+  - name: stg_lag_asset_group
+    kind: ddl
+    sql: stg/stg_lag_asset_group_ddl.sql
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: build_stg_lag_asset_group
+    kind: table
+    sql: stg/stg_lag_asset_group.sql
+    depends_on: [stg_lag_asset_group]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: stg_entities_campaign
+    kind: ddl
+    sql: stg/stg_entities_campaign_ddl.sql
     depends_on: []
     partition_field: snapshot_date
     clustering_fields: [account_id, campaign_id]
-  - name: int_entities
+  - name: build_stg_entities_campaign
     kind: table
-    sql: int/int_entities.sql
-    depends_on: [stg_entities]
+    sql: stg/stg_entities_campaign.sql
+    depends_on: [stg_entities_campaign]
     partition_field: snapshot_date
     clustering_fields: [account_id, campaign_id]
+  - name: stg_entities_asset_group
+    kind: ddl
+    sql: stg/stg_entities_asset_group_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: build_stg_entities_asset_group
+    kind: table
+    sql: stg/stg_entities_asset_group.sql
+    depends_on: [stg_entities_asset_group]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: stg_entities_asset_group_asset
+    kind: ddl
+    sql: stg/stg_entities_asset_group_asset_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: build_stg_entities_asset_group_asset
+    kind: table
+    sql: stg/stg_entities_asset_group_asset.sql
+    depends_on: [stg_entities_asset_group_asset]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: stg_entities_asset
+    kind: ddl
+    sql: stg/stg_entities_asset_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: build_stg_entities_asset
+    kind: table
+    sql: stg/stg_entities_asset.sql
+    depends_on: [stg_entities_asset]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: stg_entities_asset_group_signal
+    kind: ddl
+    sql: stg/stg_entities_asset_group_signal_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: build_stg_entities_asset_group_signal
+    kind: table
+    sql: stg/stg_entities_asset_group_signal.sql
+    depends_on: [stg_entities_asset_group_signal]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: stg_entities_campaign_asset
+    kind: ddl
+    sql: stg/stg_entities_campaign_asset_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: build_stg_entities_campaign_asset
+    kind: table
+    sql: stg/stg_entities_campaign_asset.sql
+    depends_on: [stg_entities_campaign_asset]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: stg_entities_customer_asset
+    kind: ddl
+    sql: stg/stg_entities_customer_asset_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, asset_id, field_type]
+  - name: build_stg_entities_customer_asset
+    kind: table
+    sql: stg/stg_entities_customer_asset.sql
+    depends_on: [stg_entities_customer_asset]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, asset_id, field_type]
+  - name: stg_entities_conversion_action
+    kind: ddl
+    sql: stg/stg_entities_conversion_action_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, conversion_action_id]
+  - name: build_stg_entities_conversion_action
+    kind: table
+    sql: stg/stg_entities_conversion_action.sql
+    depends_on: [stg_entities_conversion_action]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, conversion_action_id]
+  - name: stg_entities_customer
+    kind: ddl
+    sql: stg/stg_entities_customer_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id]
+  - name: build_stg_entities_customer
+    kind: table
+    sql: stg/stg_entities_customer.sql
+    depends_on: [stg_entities_customer]
+    partition_field: snapshot_date
+    clustering_fields: [account_id]
+  - name: int_complete_snapshot_days
+    kind: ddl
+    sql: int/int_complete_snapshot_days_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id]
+  - name: build_int_complete_snapshot_days
+    kind: table
+    sql: int/int_complete_snapshot_days.sql
+    depends_on: [int_complete_snapshot_days, build_stg_entities_customer]
+    partition_field: snapshot_date
+    clustering_fields: [account_id]
+  - name: int_entities_campaign
+    kind: ddl
+    sql: int/int_entities_campaign_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id]
+  - name: build_int_entities_campaign
+    kind: table
+    sql: int/int_entities_campaign.sql
+    depends_on: [int_entities_campaign, build_int_complete_snapshot_days, build_stg_entities_campaign]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id]
+  - name: int_entities_asset_group
+    kind: ddl
+    sql: int/int_entities_asset_group_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: build_int_entities_asset_group
+    kind: table
+    sql: int/int_entities_asset_group.sql
+    depends_on: [int_entities_asset_group, build_int_complete_snapshot_days, build_stg_entities_asset_group]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: int_entities_asset
+    kind: ddl
+    sql: int/int_entities_asset_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: build_int_entities_asset
+    kind: table
+    sql: int/int_entities_asset.sql
+    depends_on: [int_entities_asset, build_int_complete_snapshot_days, build_stg_entities_asset, build_stg_entities_asset_group_asset]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: int_entities_asset_group_signal
+    kind: ddl
+    sql: int/int_entities_asset_group_signal_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: build_int_entities_asset_group_signal
+    kind: table
+    sql: int/int_entities_asset_group_signal.sql
+    depends_on: [int_entities_asset_group_signal, build_int_complete_snapshot_days, build_stg_entities_asset_group_signal]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: int_entities_campaign_asset
+    kind: ddl
+    sql: int/int_entities_campaign_asset_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: build_int_entities_campaign_asset
+    kind: table
+    sql: int/int_entities_campaign_asset.sql
+    depends_on: [int_entities_campaign_asset, build_int_complete_snapshot_days, build_stg_entities_campaign_asset]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: int_entities_customer_asset
+    kind: ddl
+    sql: int/int_entities_customer_asset_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, asset_id, field_type]
+  - name: build_int_entities_customer_asset
+    kind: table
+    sql: int/int_entities_customer_asset.sql
+    depends_on: [int_entities_customer_asset, build_int_complete_snapshot_days, build_stg_entities_customer_asset]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, asset_id, field_type]
+  - name: int_entities_conversion_action
+    kind: ddl
+    sql: int/int_entities_conversion_action_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id, conversion_action_id]
+  - name: build_int_entities_conversion_action
+    kind: table
+    sql: int/int_entities_conversion_action.sql
+    depends_on: [int_entities_conversion_action, build_int_complete_snapshot_days, build_stg_entities_conversion_action]
+    partition_field: snapshot_date
+    clustering_fields: [account_id, conversion_action_id]
+  - name: int_entities_customer
+    kind: ddl
+    sql: int/int_entities_customer_ddl.sql
+    depends_on: []
+    partition_field: snapshot_date
+    clustering_fields: [account_id]
+  - name: build_int_entities_customer
+    kind: table
+    sql: int/int_entities_customer.sql
+    depends_on: [int_entities_customer, build_int_complete_snapshot_days, build_stg_entities_customer]
+    partition_field: snapshot_date
+    clustering_fields: [account_id]
   - name: v_int_entities_campaign
     kind: view
     sql: views/v_int_entities_campaign.sql
-    depends_on: [int_entities]
+    depends_on: [build_int_complete_snapshot_days, build_int_entities_campaign]
   - name: v_int_entities_asset_group
     kind: view
     sql: views/v_int_entities_asset_group.sql
-    depends_on: [int_entities]
+    depends_on: [build_int_complete_snapshot_days, build_int_entities_asset_group]
   - name: v_int_entities_asset
     kind: view
     sql: views/v_int_entities_asset.sql
-    depends_on: [int_entities]
+    depends_on: [build_int_complete_snapshot_days, build_int_entities_asset]
   - name: v_int_entities_asset_group_signal
     kind: view
     sql: views/v_int_entities_asset_group_signal.sql
-    depends_on: [int_entities]
+    depends_on: [build_int_complete_snapshot_days, build_int_entities_asset_group_signal]
   - name: v_int_entities_campaign_asset
     kind: view
     sql: views/v_int_entities_campaign_asset.sql
-    depends_on: [int_entities]
+    depends_on: [build_int_complete_snapshot_days, build_int_entities_campaign_asset]
   - name: v_int_entities_conversion_action
     kind: view
     sql: views/v_int_entities_conversion_action.sql
-    depends_on: [int_entities]
+    depends_on: [build_int_complete_snapshot_days, build_int_entities_conversion_action]
   - name: v_int_entities_customer
     kind: view
     sql: views/v_int_entities_customer.sql
-    depends_on: [int_entities]
-  - name: int_performance
-    kind: table
-    sql: int/int_performance.sql
-    depends_on:
-      - stg_performance
-      - v_int_entities_campaign
-      - v_int_entities_asset_group
-      - v_int_entities_asset
-      - v_int_entities_conversion_action
-      - v_int_entities_customer
+    depends_on: [build_int_complete_snapshot_days, build_int_entities_customer]
+  - name: int_performance_campaign
+    kind: ddl
+    sql: int/int_performance_campaign_ddl.sql
+    depends_on: []
     partition_field: date
     clustering_fields: [account_id, campaign_id]
+  - name: build_int_performance_campaign
+    kind: table
+    sql: int/int_performance_campaign.sql
+    depends_on: [int_performance_campaign, build_stg_conv_campaign, build_stg_volume_campaign, v_int_entities_campaign, v_int_entities_conversion_action, v_int_entities_customer]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id]
+  - name: int_performance_asset_group
+    kind: ddl
+    sql: int/int_performance_asset_group_ddl.sql
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: build_int_performance_asset_group
+    kind: table
+    sql: int/int_performance_asset_group.sql
+    depends_on: [int_performance_asset_group, build_stg_conv_asset_group, build_stg_volume_asset_group, v_int_entities_asset_group, v_int_entities_conversion_action, v_int_entities_customer]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: int_performance_asset
+    kind: ddl
+    sql: int/int_performance_asset_ddl.sql
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: build_int_performance_asset
+    kind: table
+    sql: int/int_performance_asset.sql
+    depends_on: [int_performance_asset, build_stg_conv_asset, build_stg_volume_asset, v_int_entities_asset, v_int_entities_conversion_action, v_int_entities_customer]
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_id]
   - name: int_lookback_windows
     kind: table
     sql: int/int_lookback_windows.sql
-    depends_on: [int_performance, int_entities]
+    depends_on: [build_int_entities_conversion_action, build_int_performance_campaign, build_stg_lag_campaign]
     partition_field: click_date
     clustering_fields: [account_id, metric_basis, conversion_action_id]
   - name: int_lag_prefix
     kind: table
     sql: int/int_lag_prefix.sql
-    depends_on: [stg_performance, int_lookback_windows, int_performance]
+    depends_on: [int_lookback_windows, build_int_performance_asset_group, build_int_performance_campaign, build_stg_conv_asset_group, build_stg_conv_campaign, build_stg_lag_asset_group, build_stg_lag_campaign, build_stg_volume_asset_group, build_stg_volume_campaign]
     partition_field: click_date
     clustering_fields: [account_id, campaign_id, metric_basis]
   - name: int_observation_cells
     kind: table
     sql: int/int_observation_cells.sql
-    depends_on: [int_performance, int_lookback_windows]
+    depends_on: [int_lookback_windows, build_int_performance_asset, build_int_performance_asset_group]
     partition_field: click_date
     clustering_fields: [account_id, campaign_id, asset_id, metric_basis]
 
@@ -213,19 +531,19 @@ steps:
   - name: build_mart_performance_campaign
     kind: table
     sql: mart/mart_performance_campaign.sql
-    depends_on: [mart_performance_campaign, int_performance]
+    depends_on: [mart_performance_campaign, build_int_performance_campaign]
     partition_field: date
     clustering_fields: [account_id, campaign_id]
   - name: build_mart_performance_asset_group
     kind: table
     sql: mart/mart_performance_asset_group.sql
-    depends_on: [mart_performance_asset_group, int_performance]
+    depends_on: [mart_performance_asset_group, build_int_performance_asset_group]
     partition_field: date
     clustering_fields: [account_id, campaign_id, asset_group_id]
   - name: build_mart_performance_asset
     kind: table
     sql: mart/mart_performance_asset.sql
-    depends_on: [mart_performance_asset, int_performance]
+    depends_on: [mart_performance_asset, build_int_performance_asset]
     partition_field: date
     clustering_fields: [account_id, campaign_id, asset_id]
   - name: build_mart_asset_performance
@@ -237,38 +555,32 @@ steps:
   - name: build_mart_campaign_truth
     kind: table
     sql: mart/mart_campaign_truth.sql
-    depends_on: [mart_campaign_truth, int_performance]
+    depends_on: [mart_campaign_truth, build_int_performance_campaign]
     partition_field: date
     clustering_fields: [account_id, campaign_id]
   - name: build_mart_cohort_campaign
     kind: table
     sql: mart/mart_cohort_campaign.sql
-    depends_on: [mart_cohort_campaign, int_lag_prefix, int_performance]
+    depends_on: [mart_cohort_campaign, int_lag_prefix, build_int_performance_campaign]
     partition_field: click_date
     clustering_fields: [account_id, campaign_id, metric_basis]
   - name: build_mart_cohort_asset_group
     kind: table
     sql: mart/mart_cohort_asset_group.sql
-    depends_on: [mart_cohort_asset_group, int_lag_prefix, int_performance]
+    depends_on: [mart_cohort_asset_group, int_lag_prefix, build_int_performance_asset_group]
     partition_field: click_date
     clustering_fields: [account_id, campaign_id, asset_group_id, metric_basis]
   - name: build_mart_cohort_asset
     kind: table
     sql: mart/mart_cohort_asset.sql
-    depends_on: [mart_cohort_asset, int_observation_cells, int_performance]
+    depends_on: [mart_cohort_asset, int_observation_cells, build_int_performance_asset]
     partition_field: click_date
     clustering_fields: [account_id, campaign_id, asset_id, metric_basis]
 
   - name: mart_bp_campaign
     kind: table
     sql: mart/mart_bp_campaign.sql
-    depends_on:
-      - build_mart_entities_campaign
-      - build_mart_entities_asset_group
-      - build_mart_entities_asset
-      - build_mart_entities_asset_group_signal
-      - build_mart_entities_campaign_asset
-      - int_entities
+    depends_on: [build_mart_entities_campaign, build_mart_entities_asset_group, build_mart_entities_asset, build_mart_entities_asset_group_signal, build_mart_entities_campaign_asset, build_int_entities_customer_asset]
     partition_field: snapshot_date
     clustering_fields: [account_id, campaign_id]
   - name: mart_bp_asset_group
@@ -290,39 +602,6 @@ steps:
       - build_mart_entities_asset
     partition_field: snapshot_date
     clustering_fields: [account_id, campaign_id, asset_group_id]
-
-  - name: v_performance_campaign
-    kind: view
-    sql: views/v_performance_campaign.sql
-    depends_on: [build_mart_performance_campaign]
-  - name: v_performance_asset_group
-    kind: view
-    sql: views/v_performance_asset_group.sql
-    depends_on: [build_mart_performance_asset_group]
-  - name: v_performance_asset
-    kind: view
-    sql: views/v_performance_asset.sql
-    depends_on: [build_mart_performance_asset]
-  - name: v_asset_performance
-    kind: view
-    sql: views/v_asset_performance.sql
-    depends_on: [build_mart_asset_performance]
-  - name: v_campaign_truth
-    kind: view
-    sql: views/v_campaign_truth.sql
-    depends_on: [build_mart_campaign_truth]
-  - name: v_cohort_campaign
-    kind: view
-    sql: views/v_cohort_campaign.sql
-    depends_on: [build_mart_cohort_campaign]
-  - name: v_cohort_asset_group
-    kind: view
-    sql: views/v_cohort_asset_group.sql
-    depends_on: [build_mart_cohort_asset_group]
-  - name: v_cohort_asset
-    kind: view
-    sql: views/v_cohort_asset.sql
-    depends_on: [build_mart_cohort_asset]
 
   - name: assert_unique_keys
     kind: assertion
@@ -370,7 +649,7 @@ steps:
   - name: assert_row_count_floor
     kind: assertion
     sql: assertions/assert_row_count_floor.sql
-    depends_on: [stg_performance, build_mart_campaign_truth]
+    depends_on: [build_mart_campaign_truth, build_stg_volume_campaign]
     severity: HARD
   - name: assert_family_coherence
     kind: assertion
@@ -433,3 +712,82 @@ steps:
       - build_mart_entities_campaign
       - build_mart_campaign_truth
     severity: SOFT
+
+  # Reporting DDL runs after validation; the whole set publishes in one job.
+  - name: performance_campaign
+    kind: ddl
+    sql: reporting/performance_campaign.sql
+    target_dataset: reporting
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id]
+  - name: performance_asset_group
+    kind: ddl
+    sql: reporting/performance_asset_group.sql
+    target_dataset: reporting
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_group_id]
+  - name: performance_asset
+    kind: ddl
+    sql: reporting/performance_asset.sql
+    target_dataset: reporting
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: asset_performance
+    kind: ddl
+    sql: reporting/asset_performance.sql
+    target_dataset: reporting
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id, asset_id]
+  - name: campaign_truth
+    kind: ddl
+    sql: reporting/campaign_truth.sql
+    target_dataset: reporting
+    depends_on: []
+    partition_field: date
+    clustering_fields: [account_id, campaign_id]
+  - name: cohort_campaign
+    kind: ddl
+    sql: reporting/cohort_campaign.sql
+    target_dataset: reporting
+    depends_on: []
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, metric_basis]
+  - name: cohort_asset_group
+    kind: ddl
+    sql: reporting/cohort_asset_group.sql
+    target_dataset: reporting
+    depends_on: []
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, asset_group_id, metric_basis]
+  - name: cohort_asset
+    kind: ddl
+    sql: reporting/cohort_asset.sql
+    target_dataset: reporting
+    depends_on: []
+    partition_field: click_date
+    clustering_fields: [account_id, campaign_id, asset_id, metric_basis]
+  - name: publish_reporting
+    kind: table
+    sql: reporting/publish_reporting.sql
+    target_dataset: reporting
+    depends_on:
+      - performance_campaign
+      - performance_asset_group
+      - performance_asset
+      - asset_performance
+      - campaign_truth
+      - cohort_campaign
+      - cohort_asset_group
+      - cohort_asset
+      - build_mart_performance_campaign
+      - build_mart_performance_asset_group
+      - build_mart_performance_asset
+      - build_mart_asset_performance
+      - build_mart_campaign_truth
+      - build_mart_cohort_campaign
+      - build_mart_cohort_asset_group
+      - build_mart_cohort_asset

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PATH-shimmed contract tests for the U7 deploy surface. No live cloud calls.
+# PATH-shimmed contract tests for the deploy surface. No live cloud calls.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -110,6 +110,9 @@ cat >"$TMP/bin/gcloud" <<'SH'
 set -euo pipefail
 printf '%s\n' "$*" >>"$FAKE_GCLOUD_LOG"
 case "$*" in
+  "projects get-ancestors "*)
+    printf 'project\nfolder\norganization\n'
+    ;;
   "projects describe "*)
     if [[ "$*" == *"projectNumber"* ]]; then
       printf '123456789012\n'
@@ -152,10 +155,17 @@ case "$*" in
       exit 96
     fi
     ;;
+  "storage buckets describe "*)
+    printf '{"labels":{"app":"pmax","env":"%s","keep":"yes"}}\n' "${FAKE_LABEL_ENV:-prod}"
+    ;;
   "storage objects describe "*)
     printf '{"name":"deployment.yaml","generation":"1"}\n'
     ;;
   "run jobs describe "*)
+    if [[ "$*" == *"metadata.labels"* ]]; then
+      printf '{"metadata":{"labels":{"app":"pmax","env":"%s","keep":"yes"}}}\n' "${FAKE_LABEL_ENV:-prod}"
+      exit 0
+    fi
     if [[ "${FAKE_JOB_EXISTS:-0}" == 1 ]]; then
       if [[ "$*" == *"spec.template.spec.template.spec.containers[0].image"* ]]; then
         printf '%s\n' "${FAKE_JOB_IMAGE:-europe-west1-docker.pkg.dev/test/repo/image@sha256:current}"
@@ -251,6 +261,18 @@ cat >"$TMP/bin/bq" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$FAKE_BQ_LOG"
+# Non-job reads must not consume query-ledger sequences.
+if [[ " $* " == *" ls "* && ( " $* " == *" --max_results=1 "* || " $* " == *" --max_results=20 "* ) && -z "${CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT:-}" ]]; then
+  printf '%s\n' '[{"type":"TABLE","tableReference":{"tableId":"probe_table"}}]'
+  exit 0
+fi
+if [[ " $* " == *" head "* ]]; then
+  printf '%s\n' '[{"probe":1}]'
+  exit 0
+elif [[ " $* " == *" show "* ]]; then
+  printf '{"labels":{"app":"pmax","env":"%s","keep":"yes"}}\n' "${FAKE_LABEL_ENV:-prod}"
+  exit 0
+fi
 if [[ -n "${FAKE_BQ_SEQUENCE:-}" ]]; then
   count_file="${FAKE_BQ_COUNT_FILE:?}"
   count=0
@@ -332,3 +354,8 @@ export FAKE_BQ_LOG="$TMP/bq.log"
 export FAKE_DOCKER_LOG="$TMP/docker.log"
 export FAKE_UV_LOG="$TMP/uv.log"
 [[ -x "$DEPLOY" ]] || fail "deploy.sh is missing or not executable"
+
+# Sourced-phase fixtures bypass phase 00, so provide its new exports explicitly.
+export DATASET_REPORTING=pmax_reporting DATASET_REPORTING_VERIFY=pmax_reporting_verify
+export PMAX_ENV=prod
+export DATASETS_CSV=pmax_raw,pmax_marts,pmax_ops,pmax_snapshots,pmax_parity_scratch,pmax_parity_scratch_bq,pmax_ci_scratch,pmax_ci_scratch_bq,pmax_marts_verify,pmax_reporting,pmax_reporting_verify
