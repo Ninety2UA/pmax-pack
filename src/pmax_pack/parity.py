@@ -1325,6 +1325,8 @@ def _render_our_fixture_marts(connection: Any, run_date: date) -> None:
         deployment=SimpleNamespace(project="fixture-project"),
         datasets=Datasets(),
         cohort_days=[1, 7, 30],
+        reporting_window_days=90,
+        storage="window",
         tolerances=Tolerances(),
     )
     ctx = RunContext(
@@ -1759,6 +1761,8 @@ def _run_our_fixture_chain_bq(
         deployment=SimpleNamespace(project=project),
         datasets=Datasets(marts=dataset),
         cohort_days=[1, 7, 30],
+        reporting_window_days=90,
+        storage="window",
         tolerances=Tolerances(),
     )
     ctx = RunContext(
@@ -1777,7 +1781,16 @@ def _run_our_fixture_chain_bq(
     )
     manifest = load_manifest(MANIFEST_PATH)
     by_name = {step.name: step for step in manifest.steps}
-    for name in ("mart_bp_campaign", "mart_bp_asset_group", "mart_bp_extended"):
+    chain = ("mart_bp_campaign", "mart_bp_asset_group", "mart_bp_extended")
+    # Parity never publishes; refuse before the first query so the chain
+    # is all-or-nothing rather than failing after earlier steps ran in scratch.
+    for name in chain:
+        if by_name[name].target_dataset != "marts":
+            raise ValueError(
+                f"parity never publishes: step {name} targets "
+                f"{by_name[name].target_dataset}"
+            )
+    for name in chain:
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
                 bigquery.ScalarQueryParameter("as_of", "DATE", run_date),
@@ -1803,7 +1816,7 @@ def run_fixture_parity_bq(
     created_tables: dict[str, set[str]] | None = None,
 ) -> ParityResult:
     """Run committed fixtures against trusted CI BigQuery scratch only."""
-    # This fixed-name path has no in-process serialization. U7's trusted.yml
+    # This fixed-name path has no in-process serialization. The trusted.yml workflow
     # must protect it with a concurrency group so parallel jobs cannot clobber
     # pmax_ci_scratch or pmax_ci_scratch_bq.
     from pmax_pack.loader import load_rows

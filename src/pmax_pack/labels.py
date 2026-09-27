@@ -16,3 +16,10 @@ def label_value(value: str) -> str:
     """Return ``value`` normalised to a valid BigQuery label value."""
     lowered = _INVALID.sub("-", str(value).lower())
     return lowered[:63]
+
+
+def job_labels(run_id: str, env: str, stage: str) -> dict[str, str]:
+    """Build job labels with a validated environment and normalized run ID."""
+    if env not in {"prod", "verify", "parity", "ci"}:
+        raise ValueError("env must be prod, verify, parity, or ci")
+    return {"app": "pmax", "env": env, "run_id": label_value(run_id), "stage": stage}

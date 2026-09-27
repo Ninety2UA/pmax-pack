@@ -5,10 +5,17 @@ import re
 from datetime import date
 from types import SimpleNamespace
 
+import pytest
+
 from pmax_pack import cli
-from pmax_pack.labels import label_value
+from pmax_pack.labels import job_labels, label_value
 
 LABEL_RE = re.compile(r"^[a-z0-9_-]{1,63}$")
+
+
+def test_job_labels_rejects_unrecognized_environment():
+    with pytest.raises(ValueError, match="env must be prod, verify, parity, or ci"):
+        job_labels("fixture-run", env="dev", stage="load")
 
 
 def test_label_value_normalises_the_live_failing_run_id():

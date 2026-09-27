@@ -15,7 +15,12 @@ from types import SimpleNamespace
 
 import sqlglot
 
-from pmax_pack.config import Datasets, Tolerances
+from pmax_pack.config import (
+    DEFAULT_COHORT_DAYS,
+    DEFAULT_REPORTING_WINDOW_DAYS,
+    Datasets,
+    Tolerances,
+)
 from pmax_pack.pipeline import RunContext
 from pmax_pack.runner import load_manifest, render
 
@@ -30,7 +35,9 @@ def main() -> int:
     config = SimpleNamespace(
         deployment=SimpleNamespace(project="fixture-project"),
         datasets=Datasets(),
-        cohort_days=[1, 3, 7, 14, 30],
+        cohort_days=list(DEFAULT_COHORT_DAYS),
+        reporting_window_days=DEFAULT_REPORTING_WINDOW_DAYS,
+        storage="window",
         tolerances=Tolerances(),
     )
     ctx = RunContext(

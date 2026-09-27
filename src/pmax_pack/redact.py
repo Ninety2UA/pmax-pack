@@ -155,6 +155,11 @@ def redact(text: str) -> str:
     return out
 
 
+def redact_line(text: object) -> str:
+    """Collapse whitespace and redact credential-shaped values in one line."""
+    return redact(" ".join(str(text).split()))
+
+
 def _redact_args(args: object) -> object:
     if args is None:
         return args

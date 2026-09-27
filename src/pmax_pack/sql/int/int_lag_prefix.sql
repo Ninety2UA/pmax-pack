@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS `{{ project }}.{{ marts_dataset }}.int_lag_prefix_cam
   unknown_lag_conversions FLOAT64, unknown_lag_value FLOAT64,
   provenance STRING, unavailable_reason STRING, maturity STRING,
   observed_through TIMESTAMP, source_refresh_date DATE,
-  source_run_id STRING, built_by_run_id STRING
+  source_run_id STRING, built_by_run_id STRING,
+  cohort_counting STRING
 )
 PARTITION BY click_date
 CLUSTER BY account_id, campaign_id, metric_basis;
@@ -26,7 +27,8 @@ CREATE TABLE IF NOT EXISTS `{{ project }}.{{ marts_dataset }}.int_lag_prefix_ass
   unknown_lag_conversions FLOAT64, unknown_lag_value FLOAT64,
   provenance STRING, unavailable_reason STRING, maturity STRING,
   observed_through TIMESTAMP, source_refresh_date DATE,
-  source_run_id STRING, built_by_run_id STRING
+  source_run_id STRING, built_by_run_id STRING,
+  cohort_counting STRING
 )
 PARTITION BY click_date
 CLUSTER BY account_id, campaign_id, asset_group_id, metric_basis;
@@ -34,8 +36,11 @@ CLUSTER BY account_id, campaign_id, asset_group_id, metric_basis;
 CREATE TEMP TABLE lag_prefix_cells AS
 WITH
 configured_days AS (
-{% for day in cohort_days %}
+{% for day in cohort_days if day > 0 %}
   SELECT {{ day }} AS cohort_day{% if not loop.last %} UNION ALL{% endif %}
+{% else %}
+  SELECT CAST(NULL AS INT64) AS cohort_day
+  FROM UNNEST(ARRAY<INT64>[]) AS day
 {% endfor %}
 ),
 timezones AS (
@@ -117,6 +122,19 @@ source_buckets AS (
   LEFT JOIN timezones AS t USING (account_id)
   WHERE b.date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
 ),
+windows AS (
+  SELECT
+    click_date,
+    account_id,
+    metric_basis,
+    conversion_action_resource_name,
+    click_through_lookback_window_days,
+    window_provenance,
+    include_in_conversions_metric
+  FROM `{{ project }}.{{ marts_dataset }}.int_lookback_windows`
+  WHERE click_date BETWEEN
+    DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
+),
 action_buckets AS (
   SELECT
     b.*,
@@ -149,7 +167,7 @@ action_buckets AS (
     COALESCE(w.include_in_conversions_metric, FALSE)
       OR COALESCE(p.has_primary_conversions, FALSE) AS contributes_to_primary
   FROM source_buckets AS b
-  LEFT JOIN `{{ project }}.{{ marts_dataset }}.int_lookback_windows` AS w
+  LEFT JOIN windows AS w
     ON w.click_date = b.click_date
     AND w.account_id = b.account_id
     AND w.metric_basis = 'CONVERSION_ACTION'
@@ -193,9 +211,11 @@ keys AS (
     grain, click_date, account_id, campaign_id, asset_group_id,
     ad_network_type, metric_basis, conversion_action_id,
     conversion_action_resource_name, conversion_action_name,
-    MAX(action_window_days) AS window_days,
-    IF(COUNTIF(action_window_provenance = 'assumed-current') > 0,
-      'assumed-current', 'observed') AS window_provenance
+    LEAST(MAX(action_window_days), {{ reporting_window_days }}) AS window_days,
+    IF(MAX(action_window_days) > {{ reporting_window_days }},
+      'capped by reporting window',
+      IF(COUNTIF(action_window_provenance = 'assumed-current') > 0,
+        'assumed-current', 'observed')) AS window_provenance
   FROM basis_buckets
   GROUP BY grain, click_date, account_id, campaign_id, asset_group_id,
     ad_network_type, metric_basis, conversion_action_id,
@@ -306,30 +326,39 @@ totals AS (
   LEFT JOIN timezones AS t USING (account_id)
   WHERE v.date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
 ),
+boundary_flags AS (
+  SELECT
+    p.*,
+    p.window_days NOT IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+      13, 14, 21, 30, 45, 60, 90) AS is_non_boundary_window
+  FROM prefixes AS p
+),
+window_total_flags AS (
+  SELECT
+    p.*,
+    p.is_window_rung
+      AND p.window_provenance != 'capped by reporting window'
+      AND p.is_non_boundary_window AS reads_window_total,
+    -- Window rungs have cohort_day = window_days in the ladder.
+    p.is_window_rung
+      AND p.cohort_day = {{ reporting_window_days }}
+      AND p.is_non_boundary_window AS reporting_cap_unavailable
+  FROM boundary_flags AS p
+),
 resolved AS (
   SELECT
     p.*,
-    IF(p.is_window_rung
-      AND p.window_days NOT IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-        13, 14, 21, 30, 45, 60, 90),
+    IF(p.reads_window_total,
       t.total_conversions, p.prefix_conversions) AS cohorted_conversions,
-    IF(p.is_window_rung
-      AND p.window_days NOT IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-        13, 14, 21, 30, 45, 60, 90),
+    IF(p.reads_window_total,
       t.total_value, p.prefix_value) AS cohorted_value,
-    IF(p.is_window_rung
-      AND p.window_days NOT IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-        13, 14, 21, 30, 45, 60, 90),
+    IF(p.reads_window_total,
       t.total_refresh_date, p.bucket_refresh_date) AS source_refresh_date,
-    IF(p.is_window_rung
-      AND p.window_days NOT IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-        13, 14, 21, 30, 45, 60, 90),
+    IF(p.reads_window_total,
       t.total_refresh_ts, p.bucket_refresh_ts) AS source_refresh_ts,
-    IF(p.is_window_rung
-      AND p.window_days NOT IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-        13, 14, 21, 30, 45, 60, 90),
+    IF(p.reads_window_total,
       t.source_run_id, p.bucket_source_run_id) AS source_run_id
-  FROM prefixes AS p
+  FROM window_total_flags AS p
   LEFT JOIN totals AS t
     ON t.grain = p.grain
     AND t.click_date = p.click_date
@@ -348,13 +377,22 @@ SELECT
   is_window_rung,
   CONCAT('D', CAST(cohort_day AS STRING), IF(is_window_rung, ' window', ''))
     AS cohort_label,
-  window_days, window_provenance, cohorted_conversions, cohorted_value,
-  unknown_lag_conversions, unknown_lag_value, 'measured' AS provenance,
-  CAST(NULL AS STRING) AS unavailable_reason,
-  IF(source_refresh_date >= DATE_ADD(click_date, INTERVAL cohort_day DAY),
-    'complete', 'immature') AS maturity,
+  window_days,
+  IF(reporting_cap_unavailable, 'capped by reporting window', window_provenance)
+    AS window_provenance,
+  IF(reporting_cap_unavailable, NULL, cohorted_conversions) AS cohorted_conversions,
+  IF(reporting_cap_unavailable, NULL, cohorted_value) AS cohorted_value,
+  unknown_lag_conversions,
+  unknown_lag_value,
+  IF(reporting_cap_unavailable, 'unavailable', 'measured') AS provenance,
+  IF(reporting_cap_unavailable,
+    'reporting window is not a lag bucket boundary', NULL) AS unavailable_reason,
+  IF(reporting_cap_unavailable, NULL,
+    IF(source_refresh_date >= DATE_ADD(click_date, INTERVAL cohort_day DAY),
+      'complete', 'immature')) AS maturity,
   source_refresh_ts AS observed_through, source_refresh_date, source_run_id,
-  @run_id AS built_by_run_id
+  @run_id AS built_by_run_id,
+  'google_lag' AS cohort_counting
 FROM resolved;
 
 BEGIN TRANSACTION;
@@ -363,13 +401,117 @@ WHERE click_date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @a
 DELETE FROM `{{ project }}.{{ marts_dataset }}.int_lag_prefix_asset_group`
 WHERE click_date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of;
 
-INSERT INTO `{{ project }}.{{ marts_dataset }}.int_lag_prefix_campaign`
-SELECT * EXCEPT (grain, asset_group_id)
+INSERT INTO `{{ project }}.{{ marts_dataset }}.int_lag_prefix_campaign` (
+  click_date,
+  account_id,
+  campaign_id,
+  ad_network_type,
+  metric_basis,
+  conversion_action_id,
+  conversion_action_resource_name,
+  conversion_action_name,
+  cohort_day,
+  is_window_rung,
+  cohort_label,
+  window_days,
+  window_provenance,
+  cohorted_conversions,
+  cohorted_value,
+  unknown_lag_conversions,
+  unknown_lag_value,
+  provenance,
+  unavailable_reason,
+  maturity,
+  observed_through,
+  source_refresh_date,
+  source_run_id,
+  built_by_run_id,
+  cohort_counting
+)
+SELECT
+  click_date,
+  account_id,
+  campaign_id,
+  ad_network_type,
+  metric_basis,
+  conversion_action_id,
+  conversion_action_resource_name,
+  conversion_action_name,
+  cohort_day,
+  is_window_rung,
+  cohort_label,
+  window_days,
+  window_provenance,
+  cohorted_conversions,
+  cohorted_value,
+  unknown_lag_conversions,
+  unknown_lag_value,
+  provenance,
+  unavailable_reason,
+  maturity,
+  observed_through,
+  source_refresh_date,
+  source_run_id,
+  built_by_run_id,
+  cohort_counting
 FROM lag_prefix_cells
 WHERE grain = 'campaign';
 
-INSERT INTO `{{ project }}.{{ marts_dataset }}.int_lag_prefix_asset_group`
-SELECT * EXCEPT (grain)
+INSERT INTO `{{ project }}.{{ marts_dataset }}.int_lag_prefix_asset_group` (
+  click_date,
+  account_id,
+  campaign_id,
+  asset_group_id,
+  ad_network_type,
+  metric_basis,
+  conversion_action_id,
+  conversion_action_resource_name,
+  conversion_action_name,
+  cohort_day,
+  is_window_rung,
+  cohort_label,
+  window_days,
+  window_provenance,
+  cohorted_conversions,
+  cohorted_value,
+  unknown_lag_conversions,
+  unknown_lag_value,
+  provenance,
+  unavailable_reason,
+  maturity,
+  observed_through,
+  source_refresh_date,
+  source_run_id,
+  built_by_run_id,
+  cohort_counting
+)
+SELECT
+  click_date,
+  account_id,
+  campaign_id,
+  asset_group_id,
+  ad_network_type,
+  metric_basis,
+  conversion_action_id,
+  conversion_action_resource_name,
+  conversion_action_name,
+  cohort_day,
+  is_window_rung,
+  cohort_label,
+  window_days,
+  window_provenance,
+  cohorted_conversions,
+  cohorted_value,
+  unknown_lag_conversions,
+  unknown_lag_value,
+  provenance,
+  unavailable_reason,
+  maturity,
+  observed_through,
+  source_refresh_date,
+  source_run_id,
+  built_by_run_id,
+  cohort_counting
 FROM lag_prefix_cells
 WHERE grain = 'asset_group';
 COMMIT TRANSACTION;

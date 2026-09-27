@@ -7,14 +7,26 @@ accounts:
 bulk_expansion: false
 # mcc: "1234567890"
 
-# ISO date. When omitted, the window defaults to run date minus 90 days and
-# the checkpoint hash uses the stable "default-90d" token.
-# start_date: "2026-05-28"
+# Keep a rolling window or accumulate history; upgrades require an explicit choice.
+storage: window
+# Positive day count; warns below the largest rung plus one plus the margin.
+reporting_window_days: 90
+# Incremental history must start on a month's first day; ignored in window mode.
+# start_date: "2026-05-01"
+# Without a start, incremental mode rounds the window start down to month day one.
 
+# Non-negative extra days for conversion restatements.
 restatement_margin_days: 7
 
-# Restricted to {1..14, 21, 30, 45, 60, 90}. Default shown.
-cohort_days: [1, 3, 7, 14, 30, 60, 90]
+# Shared ladder from {0..14, 21, 30, 45, 60, 90}; D0 applies at asset grain only.
+cohort_days: [0, 1, 3, 5, 7, 14, 30]
+
+# Environment label: prod, verify, parity, or ci.
+env: prod
+# Unique user:<email> or serviceAccount:<email> entries; no whitespace or controls.
+editors: []
+# Same email-principal list shape; one Looker service agent per organization.
+looker_service_agents: []
 
 # Reconciliation tolerance fractions.
 tolerances:

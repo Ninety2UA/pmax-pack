@@ -28,7 +28,7 @@ def test_script_renders_and_parses_every_manifest_step():
         cwd=PRODUCT_ROOT,
     )
     assert result.returncode == 0, result.stderr
-    assert "rendered and parsed 67 manifest steps" in result.stdout
+    assert "rendered and parsed 122 manifest steps" in result.stdout
 
 
 def test_failure_path_reports_step_and_survives_empty_messages(monkeypatch):

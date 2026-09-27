@@ -1,0 +1,23 @@
+SELECT
+  CAST(NULL AS STRING) AS source_run_id,
+  CAST(NULL AS TIMESTAMP) AS loaded_at,
+  CAST(NULL AS STRING) AS query_hash,
+  CAST(NULL AS INT64) AS account_id,
+  CAST(NULL AS INT64) AS campaign_id,
+  CAST(NULL AS DATE) AS snapshot_date,
+  CAST(NULL AS STRING) AS campaign_name,
+  CAST(NULL AS STRING) AS status,
+  CAST(NULL AS STRING) AS primary_status,
+  CAST(NULL AS ARRAY<STRING>) AS primary_status_reasons,
+  CAST(NULL AS STRING) AS advertising_channel_type,
+  CAST(NULL AS ARRAY<STRUCT<asset_automation_type STRING, asset_automation_status STRING>>) AS asset_automation_settings,
+  CAST(NULL AS STRING) AS positive_geo_target_type,
+  CAST(NULL AS STRING) AS negative_geo_target_type,
+  CAST(NULL AS DATETIME) AS start_date_time,
+  CAST(NULL AS DATETIME) AS end_date_time,
+  CAST(NULL AS INT64) AS budget_id,
+  CAST(NULL AS INT64) AS budget_amount_micros,
+  CAST(NULL AS BOOL) AS budget_explicitly_shared,
+  CAST(NULL AS STRING) AS budget_period,
+  CAST(NULL AS BOOL) AS url_expansion_opt_out
+LIMIT 0

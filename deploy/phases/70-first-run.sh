@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Initial deployments drain checkpoint work; upgrades validate by rebuild only.
+# Window deployments need one run; incremental deployments drain then derive history.
 
 # shellcheck source=execution-poll.sh
 # shellcheck disable=SC1091
@@ -25,62 +25,170 @@ EXECUTION_MAX_POLLS="${PMAX_EXECUTION_MAX_POLLS:-1440}"
 RECORD_DIR="$ROOT/deployments/$PROJECT"
 IMAGE_RECORD_KEY="${IMAGE_REF##*@}"
 IMAGE_RECORD_KEY="${IMAGE_RECORD_KEY//:/-}"
-EXECUTION_ENV_ARG=""
+STORAGE="${STORAGE:-window}"
+[[ "$STORAGE" == window || "$STORAGE" == incremental ]] || die "invalid storage mode"
+PHASE70_STEPS=(run)
+[[ "${LADDER_ORIGIN_UPGRADE:-$UPGRADE}" -ne 1 ]] || PHASE70_STEPS=(rebuild)
+if [[ "$STORAGE" == incremental ]]; then
+  HISTORY_START="$(uv run python - "$RUN_DAY" "$START_DATE" <<'PYHISTORY'
+from datetime import date
+import sys
+from pmax_pack.extract import wall_start
 
-if [[ "$UPGRADE" -eq 1 ]]; then
-  EXECUTION_MODE="rebuild"
-  EXECUTION_ARGS="rebuild,--as-of,$RUN_DAY,--target-dataset,$DATASET_MARTS"
-  MAX_EXECUTIONS=1
-else
-  EXECUTION_MODE="run"
-  EXECUTION_ARGS="run"
-  EXECUTION_ENV_ARG="--update-env-vars=PMAX_LEASE_MODE=first_run"
+as_of, start = (date.fromisoformat(value) for value in sys.argv[1:])
+if start > as_of:
+    raise SystemExit("incremental start_date must not be after RUN_DAY")
+print(max(start, wall_start(as_of)).isoformat())
+PYHISTORY
+)" || die "could not derive the incremental history start"
+  PHASE70_STEPS+=(history)
+  # The first supervised run counts toward MAX_EXECUTIONS; the loop ends
+  # when backfill pending_after is zero.
+  [[ "${LADDER_ORIGIN_UPGRADE:-$UPGRADE}" -ne 1 ]] || PHASE70_STEPS=(rebuild run history)
+  # A timed-out execution must be adopted before launching another job.
+  if [[ "$PLAN" -eq 0 && -f "$RECORD_DIR/first-run-execution-history-$IMAGE_RECORD_KEY.json" ]]; then
+    PHASE70_STEPS=(history)
+  elif [[ "$PLAN" -eq 0 && -f "$RECORD_DIR/first-run-execution-run-$IMAGE_RECORD_KEY.json" ]]; then
+    PHASE70_STEPS=(run history)
+  fi
 fi
-EXECUTION_RECORD="$RECORD_DIR/first-run-execution-$EXECUTION_MODE-$IMAGE_RECORD_KEY.json"
 
 build_run_evidence_sql() {
-  if [[ "$EXECUTION_MODE" == "rebuild" ]]; then
-    printf -v RUN_EVIDENCE_SQL \
-      "SELECT run_id, status, credential_fingerprint, report_uri, image_digest, mode, FORMAT_TIMESTAMP('%%Y-%%m-%%dT%%H:%%M:%%SZ', (SELECT MIN(started.event_ts) FROM ${BT}%s.%s.runs${BT} AS started WHERE started.run_id = exited.run_id AND started.event = 'STARTED' AND started.event_ts >= TIMESTAMP(@started_at)), 'UTC') AS started_at, FORMAT_TIMESTAMP('%%Y-%%m-%%dT%%H:%%M:%%SZ', event_ts, 'UTC') AS finished_at, 0 AS pending_family_chunks FROM ${BT}%s.%s.runs${BT} AS exited WHERE event = 'EXITED' AND mode = 'rebuild' AND event_ts >= TIMESTAMP(@started_at) QUALIFY ROW_NUMBER() OVER (ORDER BY event_ts DESC) = 1" \
-      "$PROJECT" "$DATASET_OPS" "$PROJECT" "$DATASET_OPS"
+  local stage_columns stage_filter result_columns
+  if [[ "$EXECUTION_MODE" == rebuild ]]; then
+    stage_columns="0 AS pending_after, status AS publish_status"
+    stage_filter="stage = 'publish' AND status != 'STARTED'"
+    result_columns="stage_evidence.pending_after, stage_evidence.publish_status"
   else
-    printf -v RUN_EVIDENCE_SQL \
-      "WITH latest AS (SELECT run_id, status, credential_fingerprint, report_uri, image_digest, mode, checkpoint_hash, as_of_date, accounts_resolved, FORMAT_TIMESTAMP('%%Y-%%m-%%dT%%H:%%M:%%SZ', (SELECT MIN(started.event_ts) FROM ${BT}%s.%s.runs${BT} AS started WHERE started.run_id = exited.run_id AND started.event = 'STARTED' AND started.event_ts >= TIMESTAMP(@started_at)), 'UTC') AS started_at, FORMAT_TIMESTAMP('%%Y-%%m-%%dT%%H:%%M:%%SZ', event_ts, 'UTC') AS finished_at FROM ${BT}%s.%s.runs${BT} AS exited WHERE event = 'EXITED' AND mode = 'run' AND event_ts >= TIMESTAMP(@started_at) QUALIFY ROW_NUMBER() OVER (ORDER BY event_ts DESC) = 1), expected AS (SELECT account_id, FORMAT_DATE('%%Y-%%m', month) AS chunk, family FROM latest, UNNEST(accounts_resolved) AS account_id, UNNEST(GENERATE_DATE_ARRAY(DATE_TRUNC(GREATEST(DATE '%s', DATE_SUB(as_of_date, INTERVAL 37 MONTH)), MONTH), DATE_TRUNC(as_of_date, MONTH), INTERVAL 1 MONTH)) AS month, UNNEST(['A','B','C']) AS family), completed AS (SELECT DISTINCT account_id, chunk, family, checkpoint_hash FROM ${BT}%s.%s.load_checkpoints${BT}) SELECT ANY_VALUE(latest.run_id) AS run_id, ANY_VALUE(latest.status) AS status, ANY_VALUE(latest.credential_fingerprint) AS credential_fingerprint, ANY_VALUE(latest.report_uri) AS report_uri, ANY_VALUE(latest.image_digest) AS image_digest, ANY_VALUE(latest.mode) AS mode, ANY_VALUE(latest.started_at) AS started_at, ANY_VALUE(latest.finished_at) AS finished_at, COUNTIF(completed.account_id IS NULL) AS pending_family_chunks FROM latest LEFT JOIN expected ON TRUE LEFT JOIN completed ON completed.account_id = expected.account_id AND completed.chunk = expected.chunk AND completed.family = expected.family AND completed.checkpoint_hash = latest.checkpoint_hash" \
-      "$PROJECT" "$DATASET_OPS" "$PROJECT" "$DATASET_OPS" "$START_DATE" \
-      "$PROJECT" "$DATASET_OPS"
+    stage_columns="JSON_VALUE(detail, '$.pending_after') AS pending_after"
+    stage_filter="stage = 'backfill' AND status = 'SUCCESS'"
+    result_columns="stage_evidence.pending_after"
   fi
+  printf -v RUN_EVIDENCE_SQL \
+    "WITH latest AS (SELECT run_id, status, credential_fingerprint, report_uri, image_digest, mode, FORMAT_TIMESTAMP('%%Y-%%m-%%dT%%H:%%M:%%SZ', (SELECT MIN(started.event_ts) FROM ${BT}%s.%s.runs${BT} AS started WHERE started.run_id = exited.run_id AND started.event = 'STARTED' AND started.event_ts >= TIMESTAMP(@started_at)), 'UTC') AS started_at, FORMAT_TIMESTAMP('%%Y-%%m-%%dT%%H:%%M:%%SZ', event_ts, 'UTC') AS finished_at FROM ${BT}%s.%s.runs${BT} AS exited WHERE event = 'EXITED' AND mode = '%s' AND event_ts >= TIMESTAMP(@started_at) QUALIFY ROW_NUMBER() OVER (ORDER BY event_ts DESC) = 1), stage_evidence AS (SELECT run_id, %s FROM ${BT}%s.%s.stages${BT} WHERE %s AND event_ts >= TIMESTAMP(@started_at) QUALIFY ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY event_ts DESC) = 1) SELECT latest.*, %s FROM latest LEFT JOIN stage_evidence USING (run_id)" \
+    "$PROJECT" "$DATASET_OPS" "$PROJECT" "$DATASET_OPS" "$EXECUTION_MODE" \
+    "$stage_columns" "$PROJECT" "$DATASET_OPS" "$stage_filter" "$result_columns"
 }
 
 phase70_poll_failure() {
   return 0
 }
 
-CHECKPOINTS_DRAINED=0
-for ((attempt = 1; attempt <= MAX_EXECUTIONS; attempt++)); do
-  DEPLOY_PHASE70_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if [[ "$PLAN" -eq 1 ]]; then
-    print_command gcloud run jobs execute pmax-pack-daily --project="$PROJECT" \
-      --region="$REGION" --task-timeout=24h --args="$EXECUTION_ARGS" \
-      ${EXECUTION_ENV_ARG:+"$EXECUTION_ENV_ARG"} \
-      --async --format="value(metadata.name)" --quiet
-    echo "PLAN  persist execution name, mode, and started_at at $EXECUTION_RECORD"
-    print_command gcloud run jobs executions describe PLAN_EXECUTION_NAME \
-      --project="$PROJECT" --region="$REGION" \
-      --format="value(status.completionTime,status.succeededCount,status.failedCount)" \
-      --quiet
-    build_run_evidence_sql
-    print_command bq query --project_id="$PROJECT" --location=EU \
-      --use_legacy_sql=false --format=json \
-      --parameter=started_at:TIMESTAMP:"$DEPLOY_PHASE70_STARTED_AT" \
-      "$RUN_EVIDENCE_SQL"
-    CHECKPOINTS_DRAINED=1
-    break
-  fi
+PHASE70_LABEL_RUN_ID="ladder-70-$(date -u +%Y%m%d%H%M%S)"
+PHASE70_QUERY_FLAGS=(
+  --maximum_bytes_billed=10737418240
+  --label=app:pmax
+  "--label=env:$PMAX_ENV"
+  "--label=run_id:$PHASE70_LABEL_RUN_ID"
+  --label=stage:ladder-70
+)
+if [[ "$PLAN" -eq 0 ]]; then
+  PHASE70_REQUEST="$(uv run python - "$CONFIG_LOCAL" "$STORAGE" "$RUN_DAY" \
+    "${HISTORY_START:-}" "$PROJECT" "$REGION" "$IMAGE_REF" \
+    "$DATASET_RAW" "$DATASET_MARTS" "$DATASET_OPS" "$DATASET_REPORTING" <<'PYREQUEST'
+import hashlib
+import json
+import sys
+from pathlib import Path
 
-  mkdir -p "$RECORD_DIR"
-  EXECUTION_ADOPTED=0
-  if [[ -f "$EXECUTION_RECORD" ]]; then
-    EXECUTION_RECORD_FIELDS="$(uv run python - "$EXECUTION_RECORD" <<'PY'
+(config, storage, day, history, project, region, image, raw, marts, ops,
+ reporting) = sys.argv[1:]
+print(json.dumps({
+    "storage": storage, "as_of": day, "history_start": history or None,
+    "project": project, "region": region, "image": image,
+    "target_datasets": {"raw": raw, "marts": marts, "ops": ops, "reporting": reporting},
+    "config_fingerprint": hashlib.sha256(Path(config).read_bytes()).hexdigest(),
+}, sort_keys=True))
+PYREQUEST
+  )" || die "could not bind the phase-70 execution request"
+
+  # Settle stale and legacy executions before any new work, even after a storage
+  # switch. Only identical requests may satisfy the resumed step selection above.
+  for RECORDED_STEP in run rebuild history; do
+    STALE_RECORD="$RECORD_DIR/first-run-execution-$RECORDED_STEP-$IMAGE_RECORD_KEY.json"
+    [[ -f "$STALE_RECORD" ]] || continue
+    EXPECTED_RECORD_MODE=rebuild
+    [[ "$RECORDED_STEP" != run ]] || EXPECTED_RECORD_MODE=run
+    REQUEST_RECORD_FIELDS="$(uv run python - "$STALE_RECORD" "$PHASE70_REQUEST" \
+      "$EXPECTED_RECORD_MODE" <<'PYMATCH'
+import json
+import sys
+from pathlib import Path
+
+try:
+    record = json.loads(Path(sys.argv[1]).read_text())
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"phase-70 execution record is invalid: {exc}") from None
+if not isinstance(record, dict):
+    raise SystemExit("phase-70 execution record must be a JSON object")
+for field in ("execution_name", "started_at", "mode"):
+    if not isinstance(record.get(field), str) or not record[field]:
+        raise SystemExit(f"phase-70 execution record has invalid {field}")
+matched = record.get("request") == json.loads(sys.argv[2]) and record["mode"] == sys.argv[3]
+print(f"{record['execution_name']}\t{int(matched)}")
+PYMATCH
+    )" || die "could not validate the phase-70 execution request record"
+    IFS=$'\t' read -r STALE_EXECUTION REQUEST_MATCHED <<<"$REQUEST_RECORD_FIELDS"
+    [[ "$REQUEST_MATCHED" -eq 0 ]] || continue
+    echo "settling recorded execution $STALE_EXECUTION before restarting a changed request"
+    poll_execution "$STALE_EXECUTION" "$EXECUTION_MAX_POLLS" \
+      "$EXECUTION_POLL_SECONDS" phase70_poll_failure
+    if [[ "$EXECUTION_RESULT" == SUCCESS || "$EXECUTION_RESULT" == FAILED ]]; then
+      rm -f -- "$STALE_RECORD"
+      die "settled execution belongs to a different phase-70 request; rerun the ladder" \
+        "to drain and rebuild the current config (cleared $STALE_RECORD)"
+    fi
+    die "different phase-70 request execution may still be running; record kept for adoption;" \
+      "rerun the ladder to settle it ($EXECUTION_RESULT, $STALE_EXECUTION)"
+  done
+fi
+
+for PHASE70_STEP in "${PHASE70_STEPS[@]}"; do
+  EXECUTION_MODE=run
+  EXECUTION_ARGS=run
+  EXECUTION_ENV_ARG="--update-env-vars=PMAX_LEASE_MODE=first_run"
+  STEP_MAX_EXECUTIONS="$MAX_EXECUTIONS"
+  if [[ "$PHASE70_STEP" != run ]]; then
+    EXECUTION_MODE=rebuild
+    EXECUTION_ARGS="rebuild,--as-of,$RUN_DAY,--target-dataset,$DATASET_MARTS"
+    EXECUTION_ENV_ARG=""
+    STEP_MAX_EXECUTIONS=1
+    if [[ "$PHASE70_STEP" == history ]]; then
+      EXECUTION_ARGS+=",--window-start,$HISTORY_START"
+    fi
+  elif [[ "$STORAGE" == window ]]; then
+    STEP_MAX_EXECUTIONS=1
+  fi
+  EXECUTION_RECORD="$RECORD_DIR/first-run-execution-$PHASE70_STEP-$IMAGE_RECORD_KEY.json"
+  CHECKPOINTS_DRAINED=0
+  for ((attempt = 1; attempt <= STEP_MAX_EXECUTIONS; attempt++)); do
+    DEPLOY_PHASE70_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [[ "$PLAN" -eq 1 ]]; then
+      print_command gcloud run jobs execute pmax-pack-daily --project="$PROJECT" \
+        --region="$REGION" --task-timeout=24h --args="$EXECUTION_ARGS" \
+        ${EXECUTION_ENV_ARG:+"$EXECUTION_ENV_ARG"} \
+        --async --format="value(metadata.name)" --quiet
+      echo "PLAN  persist execution name, mode, started_at, and effective request bindings at $EXECUTION_RECORD"
+      print_command gcloud run jobs executions describe PLAN_EXECUTION_NAME \
+        --project="$PROJECT" --region="$REGION" \
+        --format="value(status.completionTime,status.succeededCount,status.failedCount)" \
+        --quiet
+      build_run_evidence_sql
+      print_command bq query --project_id="$PROJECT" --location=EU \
+        --use_legacy_sql=false --format=json "${PHASE70_QUERY_FLAGS[@]}" \
+        --parameter=started_at:TIMESTAMP:"$DEPLOY_PHASE70_STARTED_AT" \
+        "$RUN_EVIDENCE_SQL"
+      if [[ "$PHASE70_STEP" == run && "$STORAGE" == incremental ]]; then
+        echo "PLAN  repeat supervised run while backfill pending_after > 0, at most $MAX_EXECUTIONS executions"
+      fi
+      CHECKPOINTS_DRAINED=1
+      break
+    fi
+
+    mkdir -p "$RECORD_DIR"
+    EXECUTION_ADOPTED=0
+    if [[ -f "$EXECUTION_RECORD" ]]; then
+      EXECUTION_RECORD_FIELDS="$(uv run python - "$EXECUTION_RECORD" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -97,25 +205,21 @@ for field in ("execution_name", "started_at", "mode"):
         raise SystemExit(f"phase-70 execution record has invalid {field}")
 print(f"{record['execution_name']}\t{record['started_at']}\t{record['mode']}")
 PY
-)"
-    IFS=$'\t' read -r EXECUTION_NAME DEPLOY_PHASE70_STARTED_AT RECORDED_EXECUTION_MODE \
-      <<<"$EXECUTION_RECORD_FIELDS"
-    if [[ "$RECORDED_EXECUTION_MODE" != "$EXECUTION_MODE" ]]; then
-      echo "execution record mode $RECORDED_EXECUTION_MODE differs from $EXECUTION_MODE;" \
-        "removing $EXECUTION_RECORD" >&2
-      rm -f -- "$EXECUTION_RECORD"
-    else
+      )"
+      IFS=$'\t' read -r EXECUTION_NAME DEPLOY_PHASE70_STARTED_AT RECORDED_EXECUTION_MODE \
+        <<<"$EXECUTION_RECORD_FIELDS"
+      [[ "$RECORDED_EXECUTION_MODE" == "$EXECUTION_MODE" ]] || \
+        die "phase-70 execution record changed after request validation; rerun the ladder"
       EXECUTION_ADOPTED=1
       echo "adopting in-flight execution $EXECUTION_NAME"
     fi
-  fi
-  if [[ "$EXECUTION_ADOPTED" -eq 0 ]]; then
-    capture_cmd EXECUTION_NAME gcloud run jobs execute pmax-pack-daily \
-      --project="$PROJECT" --region="$REGION" --task-timeout=24h \
-      --args="$EXECUTION_ARGS" ${EXECUTION_ENV_ARG:+"$EXECUTION_ENV_ARG"} \
-      --async --format="value(metadata.name)" --quiet
-    uv run python - "$EXECUTION_RECORD" "$EXECUTION_NAME" \
-      "$DEPLOY_PHASE70_STARTED_AT" "$EXECUTION_MODE" <<'PY'
+    if [[ "$EXECUTION_ADOPTED" -eq 0 ]]; then
+      capture_cmd EXECUTION_NAME gcloud run jobs execute pmax-pack-daily \
+        --project="$PROJECT" --region="$REGION" --task-timeout=24h \
+        --args="$EXECUTION_ARGS" ${EXECUTION_ENV_ARG:+"$EXECUTION_ENV_ARG"} \
+        --async --format="value(metadata.name)" --quiet
+      uv run python - "$EXECUTION_RECORD" "$EXECUTION_NAME" \
+        "$DEPLOY_PHASE70_STARTED_AT" "$EXECUTION_MODE" "$PHASE70_REQUEST" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -128,6 +232,7 @@ temporary.write_text(
             "execution_name": sys.argv[2],
             "mode": sys.argv[4],
             "started_at": sys.argv[3],
+            "request": json.loads(sys.argv[5]),
         },
         indent=2,
         sort_keys=True,
@@ -137,64 +242,75 @@ temporary.write_text(
 )
 temporary.replace(path)
 PY
-  fi
-  poll_execution "$EXECUTION_NAME" "$EXECUTION_MAX_POLLS" \
-    "$EXECUTION_POLL_SECONDS" phase70_poll_failure
-  if [[ "$EXECUTION_EXIT" -ne 0 ]]; then
-    case "$EXECUTION_RESULT" in
-      FAILED)
-        rm -f -- "$EXECUTION_RECORD"
-        die "$EXECUTION_MODE execution failed ($EXECUTION_NAME)"
-        ;;
-      DESCRIBE_ERROR|POLL_TIMEOUT)
-        die "$EXECUTION_MODE execution may still be running and the record was" \
-          "kept for adoption ($EXECUTION_RESULT, $EXECUTION_NAME): $EXECUTION_RECORD"
-        ;;
-      *) die "invalid Cloud Run execution poll result: $EXECUTION_RESULT" ;;
-    esac
-  fi
-  rm -f -- "$EXECUTION_RECORD"
-  build_run_evidence_sql
-  RUN_EVIDENCE_JSON="$(bq query --project_id="$PROJECT" --location=EU \
-    --use_legacy_sql=false --format=json \
-    --parameter=started_at:TIMESTAMP:"$DEPLOY_PHASE70_STARTED_AT" \
-    "$RUN_EVIDENCE_SQL")"
-  RUN_EVIDENCE="$(uv run python - "$RUN_EVIDENCE_JSON" <<'PY'
+    fi
+    poll_execution "$EXECUTION_NAME" "$EXECUTION_MAX_POLLS" \
+      "$EXECUTION_POLL_SECONDS" phase70_poll_failure
+    if [[ "$EXECUTION_EXIT" -ne 0 ]]; then
+      case "$EXECUTION_RESULT" in
+        FAILED)
+          rm -f -- "$EXECUTION_RECORD"
+          die "$EXECUTION_MODE execution failed ($EXECUTION_NAME)"
+          ;;
+        DESCRIBE_ERROR|POLL_TIMEOUT)
+          die "$EXECUTION_MODE execution may still be running and the record was" \
+            "kept for adoption ($EXECUTION_RESULT, $EXECUTION_NAME): $EXECUTION_RECORD"
+          ;;
+        *) die "invalid Cloud Run execution poll result: $EXECUTION_RESULT" ;;
+      esac
+    fi
+    build_run_evidence_sql
+    RUN_EVIDENCE_JSON="$(bq query --project_id="$PROJECT" --location=EU \
+      --use_legacy_sql=false --format=json "${PHASE70_QUERY_FLAGS[@]}" \
+      --parameter=started_at:TIMESTAMP:"$DEPLOY_PHASE70_STARTED_AT" \
+      "$RUN_EVIDENCE_SQL")"
+    rm -f -- "$EXECUTION_RECORD"
+    RUN_EVIDENCE="$(uv run python - "$RUN_EVIDENCE_JSON" "$EXECUTION_MODE" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
 
 rows = json.loads(sys.argv[1])
-if len(rows) != 1:
+if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
     raise SystemExit("expected exactly one latest run ledger row")
 row = rows[0]
+for field in ("run_id", "status", "credential_fingerprint"):
+    if not isinstance(row.get(field), str) or not row[field]:
+        raise SystemExit(f"phase-70 run evidence has invalid {field}")
+if sys.argv[2] == "rebuild":
+    if row.get("publish_status") != "SUCCESS":
+        raise SystemExit("rebuild publish stage is not SUCCESS")
+    row["pending_after"] = 0
 print(
     "\t".join(
         str(row.get(key, ""))
-        for key in ("run_id", "status", "credential_fingerprint", "pending_family_chunks")
+        for key in ("run_id", "status", "credential_fingerprint", "pending_after")
     )
 )
 PY
-)"
-  IFS=$'\t' read -r RUN_ID RUN_STATUS RUN_FINGERPRINT PENDING_FAMILY_CHUNKS <<<"$RUN_EVIDENCE"
-  [[ "$RUN_STATUS" == "SUCCESS" ]] || die "$EXECUTION_MODE ledger row is not SUCCESS"
-  [[ "$RUN_FINGERPRINT" == "$PINNED_CREDENTIAL_FINGERPRINT" ]] || \
-    die "$EXECUTION_MODE ledger credential_fingerprint does not match the pinned secret"
-  [[ "$PENDING_FAMILY_CHUNKS" =~ ^[0-9]+$ ]] || die "invalid pending checkpoint count"
-  if [[ "$PENDING_FAMILY_CHUNKS" -eq 0 ]]; then
-    CHECKPOINTS_DRAINED=1
-    break
-  fi
-done
+    )"
+    IFS=$'\t' read -r RUN_ID RUN_STATUS RUN_FINGERPRINT BACKFILL_PENDING_AFTER <<<"$RUN_EVIDENCE"
+    [[ "$RUN_STATUS" == "SUCCESS" ]] || die "$EXECUTION_MODE ledger row is not SUCCESS"
+    [[ "$RUN_FINGERPRINT" == "$PINNED_CREDENTIAL_FINGERPRINT" ]] || \
+      die "$EXECUTION_MODE ledger credential_fingerprint does not match the pinned secret"
+    [[ "$BACKFILL_PENDING_AFTER" =~ ^[0-9]+$ ]] || die "invalid backfill pending_after"
+    if [[ "$STORAGE" == window && "$BACKFILL_PENDING_AFTER" -ne 0 ]]; then
+      die "window backfill pending_after must be zero"
+    fi
+    if [[ "$BACKFILL_PENDING_AFTER" -eq 0 ]]; then
+      CHECKPOINTS_DRAINED=1
+      break
+    fi
+  done
 
-[[ "$CHECKPOINTS_DRAINED" -eq 1 ]] || \
-  die "checkpoint drain exceeded $MAX_EXECUTIONS executions"
+  [[ "$CHECKPOINTS_DRAINED" -eq 1 ]] || \
+    die "checkpoint drain exceeded $MAX_EXECUTIONS executions"
+done
 
 if [[ "$PLAN" -eq 0 ]]; then
   VALIDATION_RECORD="$RECORD_DIR/signed-review-validation-$IMAGE_RECORD_KEY.json"
   FIRST_RUN_RECORD="$RECORD_DIR/first-run-evidence-$IMAGE_RECORD_KEY.json"
-  if [[ "$EXECUTION_MODE" == "run" ]]; then
+  if [[ "${LADDER_ORIGIN_UPGRADE:-$UPGRADE}" -eq 0 ]]; then
     RUN_RECORD="$FIRST_RUN_RECORD"
   else
     RUN_RECORD="$RECORD_DIR/upgrade-rebuild-evidence-$IMAGE_RECORD_KEY.json"
@@ -202,7 +318,7 @@ if [[ "$PLAN" -eq 0 ]]; then
   mkdir -p "$RECORD_DIR"
   RUN_RECORD_ACTION="$(uv run python - "$RUN_EVIDENCE_JSON" "$IMAGE_REF" \
     "$EXECUTION_MODE" "$RUN_RECORD" "$VALIDATION_RECORD" \
-    "$FIRST_RUN_RECORD" <<'PY'
+    "$FIRST_RUN_RECORD" "${FIRST_DEPLOY_CONTINUATION:-0}" <<'PY'
 from __future__ import annotations
 
 import json
@@ -229,6 +345,7 @@ row = rows[0]
     path_text,
     validation_path_text,
     first_run_path_text,
+    first_deploy_continuation,
 ) = sys.argv[2:]
 record = {
     field: non_empty_string(row, field)
@@ -290,7 +407,10 @@ if validation_path.exists():
         validated_run_id = validation.get("run_id")
 
 current_record_preserved = (
-    existing is not None and validated_run_id != existing.get("run_id")
+    existing is not None and (
+        validated_run_id != existing.get("run_id")
+        or (first_deploy_continuation == "1" and path == Path(first_run_path_text))
+    )
 )
 if not current_record_preserved:
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -300,18 +420,23 @@ if not current_record_preserved:
     )
     temporary.replace(path)
 
-first_run_unvalidated = False
+first_run_review_preserved = False
 first_run_path = Path(first_run_path_text)
-if expected_mode == "rebuild" and first_run_path.exists():
+if expected_mode == "rebuild" and first_run_path != path and first_run_path.exists():
     try:
         first_run = json.loads(first_run_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise SystemExit(f"existing first-run evidence is invalid: {exc}") from None
     if not isinstance(first_run, dict) or first_run.get("image_digest") != current_image:
         raise SystemExit("existing first-run evidence has conflicting binding")
-    first_run_unvalidated = validated_run_id != first_run.get("run_id")
+    # Review validation at 85 does not finish a first deployment. Keep its
+    # signing/parity identity through retries until phase 95 records completion.
+    first_run_review_preserved = (
+        first_deploy_continuation == "1"
+        or validated_run_id != first_run.get("run_id")
+    )
 
-print("preserved" if current_record_preserved or first_run_unvalidated else "written")
+print("preserved" if current_record_preserved or first_run_review_preserved else "written")
 PY
   )"
   case "$RUN_RECORD_ACTION" in
@@ -320,5 +445,5 @@ PY
     *) die "phase-70 record writer returned an invalid action" ;;
   esac
 fi
-export EXECUTION_MODE RUN_ID RUN_STATUS RUN_FINGERPRINT PENDING_FAMILY_CHUNKS
+export EXECUTION_MODE RUN_ID RUN_STATUS RUN_FINGERPRINT BACKFILL_PENDING_AFTER
 export IMAGE_RECORD_KEY RUN_RECORD_PRESERVED

@@ -1,4 +1,4 @@
-"""Append-only observation log writer (KTD4).
+"""Append-only observation log writer.
 
 One parameterized INSERT ... SELECT per (account, observed_date, run_id)
 projects family A (PRIMARY and ALL_CONVERSIONS) and family B
@@ -25,8 +25,8 @@ from pmax_pack.schema import OBSERVATION_TABLE
 
 log = logging.getLogger(__name__)
 
-# Bounded Avro extract timeout. U6 may thread a PackConfig value through
-# bind_observe_stage; this is the observe-stage default.
+# Bounded Avro extract timeout for the observe stage; callers can override it
+# through bind_observe_stage.
 DEFAULT_EXPORT_TIMEOUT_SECONDS = 120.0
 
 OBSERVATION_COLUMNS: tuple[str, ...] = (
@@ -107,7 +107,7 @@ def _grain_select(
         f"  WHERE {alias}.account_id = @account_id\n"
         f"    AND {alias}.run_id = @run_id\n"
         f"    AND {alias}.date BETWEEN @window_start AND @window_end\n"
-        f"    AND {alias}.date <= @observed_date"
+        f"    AND {alias}.date <= DATE_SUB(@observed_date, INTERVAL 1 DAY)"
     )
 
 
@@ -149,9 +149,9 @@ def _winning_runs_sql(obs: str, stages: str, extra_obs_filter: str = "") -> str:
     never event_ts and never ROW_NUMBER on observation rows.
 
     Sortable-run_id contract: run_id values must be lexicographically
-    ordered such that a later run compares greater. U6 mints ids under
-    that contract (for example a time-sortable prefix plus a unique
-    suffix). Selection is undefined if two SUCCESS run_ids for the same
+    ordered such that a later run compares greater, for example a
+    time-sortable prefix plus a unique suffix. Selection is undefined
+    if two SUCCESS run_ids for the same
     (account, observed_date) invert that order.
     """
     where = f"  WHERE {extra_obs_filter}\n" if extra_obs_filter else ""
@@ -196,8 +196,8 @@ def selected_observations_sql(project: str, raw_dataset: str, ops_dataset: str) 
     """Latest SUCCESS run's complete row set per (account, observed_date).
 
     Orders by sortable run_id, never by timestamp, so a crashed later
-    run cannot surface a partial row set (KTD4). See _winning_runs_sql
-    for the sortable-run_id contract U6 must mint against.
+    run cannot surface a partial row set. See _winning_runs_sql
+    for the sortable-run_id contract used when creating a run.
     """
     obs = _qid(project, raw_dataset, "raw_observations")
     stages = _qid(project, ops_dataset, "stages")
@@ -212,7 +212,7 @@ def selected_observations_sql(project: str, raw_dataset: str, ops_dataset: str) 
 
 
 def observation_select_sql(project: str, raw_dataset: str, ops_dataset: str) -> str:
-    """SELECT body of the atomic observation INSERT (KTD4)."""
+    """SELECT body of the atomic observation INSERT."""
     raw = raw_dataset
     obs = _qid(project, raw, "raw_observations")
     stages = _qid(project, ops_dataset, "stages")
@@ -294,7 +294,7 @@ def observation_select_sql(project: str, raw_dataset: str, ops_dataset: str) -> 
         f"  WHERE run_id != @run_id\n"
         f"    AND observed_date <= @observed_date\n"
         f"    AND click_date BETWEEN @window_start AND @window_end\n"
-        f"    AND click_date <= @observed_date\n"
+        f"    AND click_date <= DATE_SUB(@observed_date, INTERVAL 1 DAY)\n"
         f"    AND (\n"
         f"      COALESCE(conversions, 0) != 0\n"
         f"      OR COALESCE(conversions_value, 0) != 0\n"
@@ -456,6 +456,8 @@ def _export_partition(
     account_id: str,
     observed_date: date,
     timeout_seconds: float,
+    labels: Mapping[str, str],
+    maximum_bytes_billed: int,
 ) -> None:
     sql = observation_export_sql(
         project, raw_dataset, report_bucket, account_id, observed_date
@@ -464,7 +466,9 @@ def _export_partition(
         query_parameters=[
             bigquery.ScalarQueryParameter("observed_date", "DATE", observed_date),
             bigquery.ScalarQueryParameter("account_id", "INT64", int(account_id)),
-        ]
+        ],
+        labels=dict(labels),
+        maximum_bytes_billed=maximum_bytes_billed,
     )
     job = client.query(sql, job_config=job_config)
     job.result(timeout=timeout_seconds)
@@ -500,6 +504,7 @@ def observe_accounts(
     maximum_bytes_billed: int | None = None,
     timeout_seconds: float | None = None,
     export_timeout_seconds: float | None = None,
+    env: str = "prod",
 ) -> dict[str, int]:
     """Write one observation row set per resolved account, then export Avro.
 
@@ -507,13 +512,13 @@ def observe_accounts(
     account's timezone. The pipeline binder defaults every account to
     ``RunContext.as_of`` and accepts ``observed_date_by_account`` as an
     override. Real per-account timezone resolution from the
-    ``entities_customer`` snapshot is the U6 caller's obligation; this
+    ``entities_customer`` snapshot is the caller's obligation; this
     function does not read customer timezones. Lag is
     DATE_DIFF(@observed_date, click_date, DAY) with that per-account
     date, never CURRENT_DATE().
 
     After each account's INSERT, persist ``first_snapshot`` (write-once),
-    then write observe SUCCESS through U11's
+    then write observe SUCCESS through
     ``ledger.stage_finished(..., account_id=...)`` and export Avro
     best-effort with a bounded ``job.result(timeout=...)``. Export hang
     or failure logs a redacted warning and never fails the run. The
@@ -536,7 +541,9 @@ def observe_accounts(
         dataset=raw_dataset,
     )
     sql = observation_insert_sql(project, raw_dataset, ops_dataset)
-    labels: Mapping[str, str] = {"app": "pmax", "run_id": label_value(run_id)}
+    labels: Mapping[str, str] = {
+        "app": "pmax", "env": env, "run_id": label_value(run_id),
+    }
     observe_jobs = 0
     export_warnings = 0
     for account in accounts:
@@ -580,6 +587,8 @@ def observe_accounts(
                 account_id=str(account),
                 observed_date=observed_date,
                 timeout_seconds=export_timeout,
+                labels=labels,
+                maximum_bytes_billed=cap,
             )
         except Exception as exc:
             export_warnings += 1

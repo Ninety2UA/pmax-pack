@@ -584,4 +584,54 @@ JSON
 
 test_review_plan_prints_recorded_values_without_querying
 
+test_first_deploy_signature_survives_post_review_failure() {
+  local failed_phase label record_root record_dir review_file
+  local current_image="europe-west1-docker.pkg.dev/test/repo/image@sha256:current"
+  for failed_phase in 88 90; do
+    label="retry-after-$failed_phase"
+    record_root="$TMP/review-$label-root"
+    record_dir="$record_root/deployments/test-pmax-project"
+    review_file="$TMP/review-$label.yaml"
+    write_review_file "$review_file" run-1 "$current_image" \
+      parity-1234567890-2026-08-27 operator@example.test
+    cp "$review_file" "$TMP/review-$label-original.yaml"
+    run_review_case "$review_file" "$label" >"$TMP/review-$label-first.out"
+    cp "$record_dir/signed-review-validation-sha256-current.json" \
+      "$TMP/review-$label-first-validation.json"
+
+    # A failure after validation leaves no phase-95 completion marker. Preflight
+    # derives this signal; retry the real phase with the exact original YAML.
+    PATH="$TMP/bin:$PATH" \
+    FAKE_BQ_LOG="$TMP/review-$label-bq.log" \
+    FAKE_BQ_RESPONSE="[{\"report_uri\":\"gs://test-report-bucket/reports/test-pmax-project/run-1.md\",\"status\":\"SUCCESS\",\"mode\":\"run\",\"image_digest\":\"$current_image\"}]" \
+    PLAN=0 ROOT="$record_root" WORK_DIR="$TMP/review-$label-work" \
+    PROJECT=test-pmax-project DATASET_OPS=pmax_ops \
+    IMAGE_REF="$current_image" RUN_ID=rebuild-2 \
+    OPERATOR_IDENTITY=operator@example.test \
+    FIRST_DEPLOY_CONTINUATION=1 PMAX_SIGNED_REVIEW="$review_file" \
+    run_phase "$PHASES/85-review.sh" deploy none none none </dev/null \
+      >"$TMP/review-$label-second.out" 2>&1 || {
+        cat "$TMP/review-$label-second.out"
+        fail "phase 85 rejected the same first-deploy signature after failure at $failed_phase"
+      }
+    cmp "$review_file" "$TMP/review-$label-original.yaml" || \
+      fail "retry rewrote the operator signature"
+    uv run python - "$TMP/review-$label-first-validation.json" \
+      "$record_dir/signed-review-validation-sha256-current.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+before, after = (json.loads(Path(path).read_text()) for path in sys.argv[1:])
+for key in before:
+    if key != "validated_at":
+        assert after[key] == before[key], (key, before[key], after[key])
+assert after["validated"] is True
+assert after["run_id"] == "run-1"
+PY
+  done
+}
+
+test_first_deploy_signature_survives_post_review_failure
+
 echo "PASS: deploy review contracts"

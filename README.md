@@ -1,138 +1,238 @@
 # pMax Performance Pack
 
-**Growth × Engineering for Performance Max.** Turn Google Ads data into an
-operator-owned BigQuery layer for best-practice scores, asset analysis, and
-cohort CPA and ROAS.
+<img src="docs/diagrams/section-overview.png" width="72" height="72" alt="An emerald window over layered data">
 
-The pack is for teams that need to inspect how Performance Max works beneath
-the dashboards. It extracts an exact account allowlist with gaarf, keeps the
-landed history, builds additive marts, publishes safe ratio views, and leaves a
-validation report after every run.
+![A bounded reporting window emerging from layered Performance Max data](docs/diagrams/readme-hero.png)
 
-## What it adds
+An operator-owned Google Ads pipeline for BigQuery, with campaign truth, asset
+diagnostics, cohort CPA and ROAS, and a report explaining what each run could prove.
 
-The pack is an independent solution. Google's open-source work remains visible
-and attributed, but it is not a dependency of the daily marts. The parity
-harness executes the pinned chain, and every report records its reference hash.
+v2.1.0 publishes eight tables for Looker Studio. They hold the configured
+reporting window, fully restated each night, while the operator chooses whether
+older click-day history expires or accumulates. One Cloud Run Job owns
+extraction, validation, publication, and the run ledger.
 
-| Starting point | What the pack adds |
+## Start here
+
+| You want to... | Read |
 |---|---|
-| pMaximizer | Pinned reference queries and an explicit rules mapping, then an independently testable Python and BigQuery daily runtime. The parity harness still executes Google's chain. The pack adds typed entity history, additive performance marts, cohort CPA and ROAS, provenance, and validation. |
-| App Reporting Pack (ARP) | The same useful raw-to-output mental model, purpose-built for Performance Max. The pack adds a single Cloud Run Job, a phase-gated deploy, digest and secret-version pinning, lease and checkpoint controls, and evidence-bound release gates. |
-| Platform reporting | Durable data at campaign, asset-group, and asset grain. Ratios are calculated after aggregation, and missing or immature cohort cells stay visible instead of being blended away. |
+| Understand the layers, grains, money, and lineage | [Data model](docs/data-model.md) |
+| Interpret a D0 or D7 cell and its missing-data state | [Cohorts](docs/cohorts.md) |
+| Choose a storage mode and understand what can be lost | [Storage](docs/storage.md) |
+| Connect a report and build its calculated fields | [Looker Studio](docs/looker.md) |
+| Diagnose a run, rebuild history, or respond to an incident | [Operations](docs/operations.md) |
+| Upgrade an existing deployment | [v2.1.0 migration](docs/migrations/v2.1.0.md) |
+| Review permissions or release changes | [IAM](deploy/iam.md) · [Release notes](docs/releases/v2.1.0.md) |
 
-Our code, Google's reference material, tests, and CI remain separate:
+## What you get
 
-- `src/pmax_pack/` contains the runtime and SQL.
-- `src/pmax_pack/reference/pmaximizer/` contains the pinned reference, its pin,
-  and `RULES.md`.
-- `tests/fixtures/` contains sanitized synthetic fixtures.
-- `.github/workflows/pr.yml` runs fixture-only checks without Google Ads or GCP
-  credentials.
+Extraction covers an explicit account allowlist, and each output identifies
+the source and build that produced it.
+
+| Capability | Delivered behavior |
+|---|---|
+| Reporting | Eight materialized tables in `pmax_reporting`, restricted to the last `reporting_window_days` full click days. The default is 90. |
+| Campaign truth | Campaign-level cost, clicks, impressions, and conversions, kept separate from asset attribution. |
+| Asset diagnosis | Asset and asset-group facts, entity history, eligibility reasons, creative attributes, and best-practice score marts. |
+| Cohorts | Campaign and asset-group lag ladders plus asset observation ladders, with explicit `cohort_counting`, provenance, maturity, and unavailable reasons. |
+| History | `window` storage expires old click-day partitions; `incremental` storage retains them and resumes monthly extraction chunks. |
+| Operations | Lease protection, transactional replacements, digest and secret-version pins, run reports, audit evidence, and a deployment ladder (the phased sequence that `deploy/deploy.sh` runs) with an operator review. |
+
+This is an independent runtime. pMaximizer is Google's open-source set of
+Performance Max reporting queries; the pin is the fixed upstream commit that
+the parity tests compare against, recorded in
+[PIN.md](src/pmax_pack/reference/pmaximizer/PIN.md). The pinned pMaximizer
+queries and rules mapping remain attributed and testable through parity; the
+daily marts do not execute Google's upstream chain. The App Reporting Pack (ARP) informs the reporting
+window and asset-day labels but is not a runtime dependency. The exact upstream
+mapping and its deliberate omissions are in the [data model](docs/data-model.md#current-fork-transformation-mapping).
 
 ## Architecture
 
-One private Cloud Run Job owns the daily data path. Cloud Scheduler starts it
-at 04:00 in the configured deployment timezone. The Job reads a private config
-object, mounts one numeric Secret Manager version, and writes BigQuery datasets
-plus a report and an append-only observation backup.
+Cloud Scheduler starts the private Cloud Run Job at 04:00 in the deployment
+timezone (`timezone_override`). The Job reads private YAML configuration and a numeric
+Secret Manager version, then acquires the single-writer lease. A competing
+execution records `SKIPPED` and performs no stages.
 
-![pMax Performance Pack architecture](docs/diagrams/architecture.svg)
+![One Cloud Run Job writes raw data, validates marts, and publishes a separate reporting dataset for Looker Studio](docs/diagrams/architecture.svg)
 
-[Edit the architecture scene](docs/diagrams/architecture.excalidraw)
+[Editable architecture scene](docs/diagrams/architecture.excalidraw)
 
-The runtime image is pinned by digest. Public CI (pull requests, pushes to
-`main`, forks) receives no credentials, never federates to Google Cloud, and
-uses sanitized fixtures only. Real-data parity runs only from the operator's
-deploy ladder or a manual `pmax-pack parity --source live` and drops the
-scratch tables it created after the run. The scratch datasets persist.
+The datasets have distinct readers and lifetimes:
 
-## Data model
+| Dataset | Role |
+|---|---|
+| `pmax_raw` | Landed fact partitions, entity snapshots, and the append-only observation diary. |
+| `pmax_marts` | Staging, typed intermediates, additive marts, entity history, and score marts. |
+| `pmax_reporting` | The eight dashboard tables. The Looker account's only data grant is here. |
+| `pmax_ops` | Run and stage evidence, assertions, and extraction checkpoints. |
+| `pmax_marts_verify`, `pmax_reporting_verify` | The paired rebuild and migration rehearsal destinations. |
+| Snapshot and parity datasets | Upgrade evidence and isolated comparison work, with their own access boundaries. |
 
-Think of the layers like a spreadsheet:
+A reporting publication first prepares table schemas, then replaces the eight
+table contents in one transaction. A HARD validation failure prevents that
+publication: marts may contain the attempted generation, while readers retain
+the previous reporting generation. The SQL uses BigQuery's
+[atomic multi-table transaction support](https://docs.cloud.google.com/bigquery/docs/transactions).
+A dashboard can still show cached results or separate charts queried on opposite
+sides of the commit. Compare both `as_of` and `run_id` after refreshing every
+source, and configure freshness as described
+in the [Looker guide](docs/looker.md).
 
-- Raw partitions keep the latest landed copy for each table and day, with
-  `loaded_at` and `run_id`. The append-only `raw_observations` table is the
-  diary for cumulative asset observations.
-- Staging and intermediate layers are formula sheets. They select the latest
-  row per key, type it, and attach lineage and provenance.
-- Marts are the nightly answer sheets. Their measures stay additive.
-- Views calculate CPA, ROAS, and CTR as `SUM(numerator) / SUM(denominator)` at
-  read time.
+## The nightly data path
 
-![Performance Pack data model](docs/diagrams/data-model.svg)
+![Daily stages proceed through observe, backfill, transforms, validation, publish, and report; failed validation preserves the previous reporting generation](docs/diagrams/daily-run.svg)
 
-[Edit the data-model scene](docs/diagrams/data-model.excalidraw)
+[Editable daily-run scene](docs/diagrams/daily-run.excalidraw)
 
-The current fork-table mapping keeps the recognizable pMaximizer outputs while
-moving them onto the v2 contracts:
+The shared stage order is:
 
-| Upstream fork query | Scope | v2 contract |
-|---|---|---|
-| `bq_queries/01-image_assets.sql` | Pinned BigQuery chain | `mart_entities_asset`, image URL, dimensions, and orientation |
-| `bq_queries/02-primary_conversion_action_pmax.sql` | Pinned parity intermediate | Named actions and windows remain in `mart_entities_conversion_action`; no frequency-selected table is published |
-| `bq_queries/03-primary_conversion_action_search.sql` | Pinned parity intermediate | Named actions and windows remain in `mart_entities_conversion_action`; no frequency-selected table is published |
-| `bq_queries/04-text_assets.sql` | Pinned BigQuery chain | `mart_entities_asset`, text and field-type rows |
-| `bq_queries/05-video_assets.sql` | Pinned BigQuery chain | `mart_entities_asset`, video ID, title, and orientation |
-| `bq_queries/07-campaign_data.sql` | Pinned BigQuery chain | Campaign, asset-group signal, campaign-asset, and customer entity marts |
-| `bq_queries/09-bpscore.sql` | Pinned BigQuery chain | `mart_bp_campaign` |
-| `bq_queries/10-assetgroupbestpractices.sql` | Pinned BigQuery chain | `mart_bp_asset_group` |
-| `google_ads_queries/campaign_settings.sql` | Pinned, unnumbered GAQL input | Campaign entity settings plus `mart_bp_campaign` scores |
-| `assetgroupperformance` | Upstream output outside the current pin | Additive metrics in `mart_performance_asset_group`; the constant performance label is deliberately dropped |
+```text
+extract -> load -> observe -> backfill -> score -> lag -> cohort
+        -> validate -> publish -> report
+```
 
-`assetgroupperformance` is a legacy upstream mapping, not a file in the current
-pin. The pack makes no file-level parity claim for transformations outside that
-pin.
+Extraction runs the 17 queries through a bounded pool and spools rows per table.
+No load begins until extraction succeeds for every required account. Each fact
+table then gets one landing load and its own transactional range replacement;
+entity snapshot loads share the pool. The replacement clears empty days inside
+the fetched interval and leaves trailing days outside it untouched. Landing
+tables have a 24-hour expiration and a guarded cleanup path.
 
-The detailed grain, partition, clustering, money, provenance, and ratio
-contracts live in [docs/data-model.md](docs/data-model.md). Asset attributions
-are not expected to sum to campaign totals. Use `mart_campaign_truth` for the
+The observe stage appends readings before the optional history backfill. In
+`window` mode that backfill stage records zero pending chunks. In `incremental`
+mode it resumes unfinished monthly chunks, recording a checkpoint only after a
+successful swap. Ready transforms can run together within a stage; dependencies
+and stage boundaries still determine execution order. For troubleshooting,
+`--serial` runs transforms, assertions, and report collectors one at a time.
+
+The nightly pull and click-keyed transforms include the partial run day:
+`as_of - R` through `as_of`, where `R = reporting_window_days`. Reporting
+publication excludes that partial day and exposes `as_of - R` through
+`as_of - 1`. Enlarging a rebuild's `--window-start` can derive older marts,
+but does not enlarge the reporting tables.
+
+## Read the right grain
+
+![Source data passes through typed history and additive marts into bounded reporting tables, with ratios computed in Looker Studio](docs/diagrams/data-model.svg)
+
+[Editable data-model scene](docs/diagrams/data-model.excalidraw)
+
+| Reporting table | Use it for |
+|---|---|
+| `performance_campaign` | Campaign metrics by network and metric basis. |
+| `performance_asset_group` | Asset-group metrics at the same additive basis. |
+| `performance_asset` | Asset-link metrics, including field type. |
+| `asset_performance` | Asset detail with eligibility and creative attributes. |
+| `campaign_truth` | Campaign totals from the campaign report. |
+| `cohort_campaign` | Campaign conversion-lag cohorts. |
+| `cohort_asset_group` | Asset-group conversion-lag cohorts. |
+| `cohort_asset` | Asset cohorts from the observation diary. |
+
+Internal `v_int_entities_*` views supply the transform graph. Create CPA,
+ROAS, and CTR from the reporting
+tables using the [tested calculated-field recipes](docs/data-model.md#looker-studio-calculated-fields).
+
+For example, costs of 10 and 90 with conversion counts of 1 and 3 produce
+CPA `(10 + 90) / (1 + 3) = 25`. A zero denominator returns NULL. Select one
+currency, and do not combine NETWORK measures with CONVERSION_ACTION measures.
+Cost is not allocated to individual conversion actions in performance tables.
+Asset attribution does not sum to campaign truth; use `campaign_truth` for the
 campaign total.
+
+The PRIMARY conversion basis is the campaign's conversion goals as Google
+applies them, decomposed exactly by action; [What PRIMARY means](docs/data-model.md#what-primary-means)
+defines its scope and the limits of goal evidence.
 
 ## Cohort CPA and ROAS
 
-The cohort layer preserves two valid readings of cohort day D:
+![Campaign and asset-group lag readings and asset observations produce separately labelled cohort cells](docs/diagrams/cohort-mechanism.svg)
 
-1. Campaign and asset-group cells use Google's conversion-lag buckets. A D
-   cell is the prefix of buckets whose upper boundary is at most D.
-2. Asset cells use the observation stream. A D cell is the cumulative value
-   visible on click date plus D in the account timezone.
+[Editable cohort scene](docs/diagrams/cohort-mechanism.excalidraw)
 
-Those readings can differ at the same boundary. Every cell therefore carries
-`provenance`, `maturity`, and `observed_through`.
+`cohort_counting` identifies the convention: `google_lag` for campaign and
+asset-group rows, `arp_calendar` for asset rows. The default ladder is
+`[0, 1, 3, 5, 7, 14, 30]`; D0 applies only to assets. The exact day mapping,
+window edge, and worked example have one definition in
+[the cohort guide](docs/cohorts.md).
 
-![Cohort mechanism](docs/diagrams/cohort-mechanism.svg)
+An action's click-through window caps its ladder and contributes a final window
+rung. An asset observation can carry the preceding non-seed reading for at most
+five calendar days. Missing readings remain `unavailable` when that rule cannot resolve
+them. Calendar age alone never establishes completeness: inspect
+`observed_through`, `maturity`, `provenance`, and `unavailable_reason`.
 
-[Edit the cohort scene](docs/diagrams/cohort-mechanism.excalidraw)
+Filter a cohort chart to one counting convention, rung, and metric basis, or
+keep them as chart dimensions; never aggregate across them.
+Click-day cost repeats across those dimensions. Publication excludes NULL-cost
+cells; the operator report retains the diagnostics explaining those omissions.
+Older incremental rows that have not been restated can retain NULL
+`cohort_counting` and their old labels.
 
-The window rule is strict:
+## Choose storage before deployment
 
-- Configured rungs are D1 to D14, D21, D30, D45, D60, or D90.
-- An action's click-through lookback window caps its ladder. Days after the
-  window do not exist.
-- The final rung is always the window and is labelled `D<window> window`.
-- A window on a bucket boundary uses the bucket prefix. A non-boundary window
-  uses the click-day conversion total for the selected basis.
-- A missed asset observation may carry the prior non-seed value for at most
-  five calendar days. Longer gaps are unavailable, never forecast.
-- A cell becomes complete only when the selected source has refreshed through
-  click date plus D. Calendar age alone is not maturity evidence.
+![Storage mode changes click-day retention while both modes expose the same bounded reporting window](docs/diagrams/storage-tiers.svg)
 
-Cohort marts keep fixed click-day cost and additive conversion components.
-`v_cohort_*` excludes missing-cost cells, then calculates cohort CPA and ROAS
-after aggregation. See [docs/cohorts.md](docs/cohorts.md) for the complete
-contract.
+[Editable storage scene](docs/diagrams/storage-tiers.excalidraw)
 
-## Deploy with one command
+| Choice | `window` | `incremental` |
+|---|---|---|
+| Older click-day history | Expires at `R + 1` days by partition boundary. | Retained without partition expiration. |
+| Monthly history backfill | No pending chunks. | Resumes pending chunks from the configured start. |
+| `start_date` | Ignored, with a warning if supplied. | Must be month-aligned; an omitted start is the first day of the month containing the run date minus `reporting_window_days`. |
+| Dashboard coverage | Last R full click days. | Last R full click days. |
+| Entity snapshots and observations | Never automatically expired by this rule. | Never automatically expired by this rule. |
 
-Requirements: Python 3.12 through `uv`, Google Cloud CLI, `bq`, Docker buildx,
-and an existing billed GCP project in `europe-west1` labelled `app=pmax`. The
-organization policy `iam.disableServiceAccountKeyCreation` must be enforced,
-the config must set `timezone_override`, and the operator-owned Google Ads
-credential file must stay outside the repository. Shellcheck is useful for
-development, but the deploy ladder does not invoke it.
+The additional day protects the oldest partition during the run. Retention
+follows the partition column, not a table-name prefix: `snapshot_date` and
+`observed_date` are preserved. The reporting and operations datasets never
+receive the click-day expiration rule.
 
-Review the non-mutating plan first:
+Switching from incremental to window can remove accumulated history.
+Switching back does not restore deleted data. Parked, unmodified BigQuery
+partitions can qualify for long-term storage pricing after 90 days; reads do
+not reset that timer. Use the region selector on
+[BigQuery pricing](https://cloud.google.com/bigquery/pricing) for the deployment's
+storage model and location. The [storage guide](docs/storage.md) explains the
+retention evidence and recovery limits.
+
+The [observation bound](docs/cohorts.md#how-much-observation-history-is-collected)
+is also a permanent-loss decision. A larger reporting window later cannot
+reconstruct what Google reported on a day the pack did not observe.
+
+## Deploy and upgrade
+
+Start with [config/example.yaml](config/example.yaml). Deployment requires
+Python 3.12 through `uv`, Google Cloud CLI and `bq`, Docker buildx, an existing
+billed project, and an explicit deployment timezone. The ladder checks the
+project's organization parent, `app=pmax` label, region, and the enforced
+`iam.disableServiceAccountKeyCreation` policy. Keep the Google Ads credential
+file outside the repository.
+
+Configuration uses string dataset identifiers and explicit principals:
+
+```yaml
+storage: window
+reporting_window_days: 90
+cohort_days: [0, 1, 3, 5, 7, 14, 30]
+restatement_margin_days: 7
+env: prod
+datasets:
+  reporting: "pmax_reporting"
+  reporting_verify: "pmax_reporting_verify"
+editors:
+  - "user:editor@example.com"
+looker_service_agents: [] # Populate with the service agent from each editor organization.
+```
+
+This is an excerpt, not a complete deployable config. The [Looker guide](docs/looker.md)
+explains how to obtain the organization-specific agent principals and grant
+editor access before editing a data source. There is no personal-credentials
+mode.
+
+Set `REGION` from the validated config as described in the
+[migration's invocation convention](docs/migrations/v2.1.0.md#invocation-convention).
+Preview the deployment ladder:
 
 ```bash
 export PMAX_PROJECT_ID="your-gcp-project-id"
@@ -142,103 +242,127 @@ export PMAX_CREDENTIAL_FILE="/secure/path/google-ads.yaml"
 
 bash deploy/deploy.sh \
   --project "$PMAX_PROJECT_ID" \
-  --region europe-west1 \
+  --region "$REGION" \
   --config-uri "gs://$PMAX_CONFIG_BUCKET/deployment.yaml" \
   --config-file "$PMAX_CONFIG_FILE" \
   --credential-file "$PMAX_CREDENTIAL_FILE" \
   --plan
 ```
 
-`--plan` performs read-only target checks and prints the full ladder. Never use
-`--yes`. A live non-interactive invocation can cross a human-owned phase only
-when the operator has written that exact phase into `PMAX_CONFIRMED_PHASES`.
-For example, API, IAM, WIF, and invoker work use the phase names `10-apis`,
-`40-iam`, `45-wif`, and `55-invoker`. The operator decides the list for each
-invocation.
+Also supply `PMAX_DEPLOYER_MEMBER`, `PMAX_OPERATOR_MEMBER`,
+`PMAX_GITHUB_REPOSITORY_ID`, `PMAX_GITHUB_OWNER_ID`, and
+`PMAX_OAUTH_PUBLISHING_STATUS` as described in
+[Bootstrap inputs](deploy/iam.md#bootstrap-inputs).
 
-The phases are ordered so evidence arrives before authority:
+`--plan` performs read-only target checks and resolves the ladder generation
+without writing it. `--plan` prints configured principals, including editor
+addresses; never commit it. Keep that output private.
+Never use `--yes`. Human-run phases require the operator's exact
+`PMAX_CONFIRMED_PHASES` entries when invoked without a TTY. Phase 85 may never
+appear in that list. Only the operator authors `PMAX_SIGNED_REVIEW`.
 
-| Phases | Result |
+![The upgrade separates preparation, candidate evidence, operator review, rehearsal, retention, and resume](docs/diagrams/upgrade-sequence.svg)
+
+[Editable upgrade scene](docs/diagrams/upgrade-sequence.excalidraw)
+
+| Step | Evidence and result |
 |---|---|
-| 00 to 30 | Preflight, APIs, data resources, upgrade-only cost dry-run, and pinned secret |
-| 40 to 65 | IAM, WIF, image build or digest reuse, invoker, paused Scheduler, and config record |
-| 70 to 80 | First run, lease drill, and parity evidence |
-| 85 | Human review of the persisted report and evidence |
-| 88 to 95 | Rehearsal, failed-execution alert proof, and operator-owned resume |
+| Operator preparation | Pause scheduling, preserve the previous config, choose storage, and read the migration procedure. An upgrade requires an explicit storage choice. |
+| Pass 1 through 80 | Provision and record the candidate, migrate at 68, rebuild and publish at 70, exercise the lease at 75, pre-check reporting reads, and stop at phase 80 for the operator to run the live printed LOCAL parity command before collecting parity evidence. |
+| Stop at 85 | Review the exact run, image, report, and parity evidence. Perform and record one manual run each scheduled morning in the deployment timezone while paused. |
+| Signed pass | Supply the candidate digest through `PMAX_IMAGE_REF`, validate the review, rehearse against the twin at 88, apply operator-confirmed retention at 89, prove alerts, and pass the phase-95 observation gate before resuming. |
 
-Phase 85 may never appear in `PMAX_CONFIRMED_PHASES`. It validates
-`PMAX_SIGNED_REVIEW` first and pauses for the operator unless a valid signed
-file is supplied. That file is personally authored by the operator and bound
-to the exact run, image digest, report, parity evidence, and review time.
-Agents and automation must never create or supply it.
+Follow [the migration procedure](docs/migrations/v2.1.0.md) for retries,
+continuations, required evidence, and rollback. An explicit image pin wins;
+automatic reuse of an unfinished generation requires the same repository HEAD
+within seven days. A rollback returns to the anchor, the recorded prior release
+image and its source checkout; it must clear expiration and restore the anchor's
+schema and config before running its own ladder. The anchor does not publish
+to `pmax_reporting`, so dashboards remain at the last candidate `as_of`.
 
-## Daily operation
+## Cost and runtime budget
 
-![Daily run stages](docs/diagrams/daily-run.svg)
+Fact loads use one landing load and swap per table, ready transforms run
+concurrently, and report collection is pooled, which keeps submitted jobs and
+idle waits between independent steps low. The deployment's
+first two scheduled reports establish the measured baseline. The first reading
+is expected above the 120-second stage-span target; that target is informational
+and excludes startup and tail work.
 
-[Edit the daily-run scene](docs/diagrams/daily-run.excalidraw)
+The report separates startup, stage span, tail, and process total, with job
+submissions, rows loaded, and load-path jobs. Process timing begins at CLI entry
+and excludes the final report upload; compare it with Cloud Run execution
+timestamps to understand time outside that interval. `Total jobs` counts
+submissions, so reconciliation against `JOBS_BY_PROJECT` filters
+`parent_job_id IS NULL` plus the run label. That recipe applies to real nightly
+runs, not rebuild dry runs. See [operations](docs/operations.md) for the query.
 
-The daily Job acquires a lease before it writes. A concurrent execution exits
-`SKIPPED`. Successful chunks record checkpoints, so a retry resumes from
-persisted work. Every eligible click day in the re-pull window is rebuilt in
-one transaction per table; a manifest step can update more than one table in a
-single transaction. Reports land under `reports/<deployment>/<run_id>.md`.
-Every executed daily `run`, PASS or FAIL, replaces `latest.md`. SKIPPED runs,
-rebuilds, and backfills leave it alone.
+Looker queries bill to the client project. Dataset grants bound the data they
+can read; under on-demand pricing, the project's configured
+[per-user daily query quota](https://docs.cloud.google.com/bigquery/docs/custom-quotas)
+bounds usage. The operator sets that quota from a measured estimate in phase 45,
+as described in [IAM](deploy/iam.md). Review Cloud Billing by environment and
+application labels alongside run budgets; a runtime target is not a spending
+cap.
 
-The observation log is append-only and backed up separately from report
-retention. Alerting watches failed Cloud Run executions. Operators should
-inspect the report's stale cells, null-cost cells, frozen chunks, and parity
-staleness before treating a run as healthy. On a first deployment, phase 70
-drains extraction checkpoints. On an upgrade, it rebuilds the live marts. See
-[docs/operations.md](docs/operations.md) for upgrades, rollback, rotation, and
-restore behavior.
+Before widening a window, run a cost dry run against the verification pair:
 
-## Troubleshooting from the synthetic fixture
+```bash
+uv run pmax-pack rebuild \
+  --as-of 2026-09-25 \
+  --target-dataset pmax_marts_verify \
+  --dry-run
+```
 
-The examples below come from `tests/fixtures/cohorts/synthetic_lag.json`. They
-contain generated IDs and values.
+The command uses the configured reporting window and does not publish data.
+Its older-`as_of` publication guard is recorded as `not evaluated (dry run)`;
+a real rebuild can still refuse to replace newer reporting data. Targeting the
+live marts uses the production lease. See [operations](docs/operations.md)
+before using `--allow-older-as-of` or `--window-start`.
 
-| Symptom | Synthetic proof | What to check |
-|---|---|---|
-| D1 and D7 differ sharply | With click-day cost 100, PRIMARY D1 has 2 conversions, value 60, CPA 50, ROAS 0.6. D7 has 5 conversions, value 180, CPA 20, ROAS 1.8. | Conversion lag is working. Compare the same basis, network, maturity, and provenance before calling it a regression. |
-| A D7 asset cell is `carried` | The fixture carries 1.5 conversions and value 45 from the prior observation. | Read `observed_through`. Carry is allowed for at most five days and never from the seed observation. |
-| A cohort cell is missing | Fixture cases distinguish `before first snapshot`, `gap exceeded`, and `seed only`. | Keep `unavailable_reason` visible. A future target is absent until the observation bound reaches it. |
-| Campaign totals exceed asset totals | Asset metrics are attributed by Google and are not additive to campaign totals. | Use `mart_campaign_truth` for campaign totals and asset marts for asset diagnosis. |
-| Unknown lag appears at every rung | The fixture retains 0.4 unknown-lag conversions and value 4 as diagnostics. | Do not sum unknown-lag diagnostics across cohort days. They never enter cohorted conversions or value. |
-| A retry reports `SKIPPED` | Another execution owns the lease. | Confirm the owner run is progressing. A SKIPPED run performs no stages and does not advance `latest.md`. |
+## Read the run report
 
-## Cost reference
+Each run writes its report to `reports/<deployment>/<run_id>.md`. An executed
+daily `run`, whether PASS or FAIL, advances `latest.md`. SKIPPED runs, rebuilds,
+and backfills leave that pointer unchanged.
 
-The operator sets the per-user daily BigQuery query cap in phase 45 from a
-measured `PMAX_CI_DAILY_QUERY_QUOTA_MIB` value. The reference deployment used
-50 GiB. Measurements from that one-account deployment on 2026-08-31 were
-about 40 minutes for a daily run and about 7 minutes for a verification
-rebuild. These are not product constants: account history, action windows,
-entity volume, and BigQuery minimum billing can move both time and bytes.
+| Signal | Operator interpretation |
+|---|---|
+| HARD assertion failure | The candidate was not published. Start with the named assertion and keep the previous reporting generation available. |
+| SOFT finding | Read the affected grain, date range, and reason; publication can proceed. |
+| `unavailable` cohort cells | Check first-snapshot coverage, seed-only readings, carry gaps, and the reporting-window cap. |
+| Pending incremental chunks | History extraction is incomplete; compare `pending_before` and `pending_after`. |
+| Retention drift | Reconcile table options through [the operator procedure](docs/data-model.md#operator-command-used-by-the-ladder); the runtime reports drift and does not apply ALTERs. |
+| Mixed chart generations | Refresh every source and compare both `as_of` and `run_id` before diagnosing a data reconciliation defect. |
 
-Run `rebuild --dry-run` before a wider window or schema change. It issues no
-billed reads and reports an upper-bound estimate using the configured cohort
-window plus restatement margin. Point it at a verification dataset. With
-`--target-dataset` set to the live marts, the command acquires the production
-lease and can either SKIP the daily Job or be skipped by it.
+Raw and observation data contains aggregate advertising performance and entity
+configuration, not end-user identifiers. Access, sharing, revocation, and the
+three incident-deletion cases are defined in [operations](docs/operations.md).
+The observation Avro copies have a separate lifetime from report objects.
 
-## Local checks
+## Local verification
 
 ```bash
 uv sync --locked
 uv run pytest -q
-bash deploy/tests/test_deploy_plan.sh </dev/null
+make deploy-test
 uv run python scripts/lint_dataset_refs.py
 uv run python scripts/scrub_check.py .
 ```
 
-The pull-request workflow runs on sanitized fixtures, with
-`permissions: contents: read` and no cloud credentials. Protected real-data
-parity is deliberately outside that workflow.
+Pull-request CI uses sanitized fixtures and read-only repository permissions,
+without Google Ads or GCP credentials. SQL checks render and parse the manifest,
+audit dependencies, and pin known partition-filter warnings. The partition
+lint is advisory for documented warnings; an undocumented warning fails the
+pin. Its scope is rendered manifest SQL, not SQL embedded in Python.
+
+The diagram builder lives in [docs/diagrams/build.py](docs/diagrams/build.py).
+It creates the editable Excalidraw scenes and the SVG and PNG exports, checks
+layout and font embedding, and restores the canvas it used. Diagram exports and
+visual QA are part of the release review.
 
 ## License and attribution
 
-The pack is licensed under Apache-2.0. See [LICENSE](LICENSE) and
-[NOTICE](NOTICE). Pinned Google reference queries retain their upstream
-attribution and remain separate from the pack's runtime code.
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Pinned Google reference
+queries retain their upstream attribution and remain separate from the pack's
+runtime code.

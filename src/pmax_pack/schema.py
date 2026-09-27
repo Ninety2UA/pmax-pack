@@ -1,8 +1,8 @@
 """Ops table specs for pMax Performance Pack.
 
-TableSpec plus OPS_TABLES live here so ensure_table (later units) and the
-ledger share one schema. RAW_TABLES is the U2 extension point for families
-A-D. OBSERVATION_TABLE is the U13 extension point for the append-only
+TableSpec plus OPS_TABLES live here so ensure_table and the
+ledger share one schema. RAW_TABLES is the extension point for families
+A-D. OBSERVATION_TABLE is the extension point for the append-only
 observation log. Google Ads ids are INT64. Event tables are append-only.
 """
 from __future__ import annotations
@@ -395,7 +395,7 @@ RAW_TABLES: dict[str, TableSpec] = {
             _sf("budget_explicitly_shared", "BOOL"),
             _sf("budget_period", "STRING"),
             # Absent from google-ads v25 GAQL (validate_gaql is the offline
-            # gate). NULLABLE BOOL so U4 can compare against a later API pin
+            # gate). NULLABLE BOOL for comparison against a later API pin
             # / pMaximizer url-expansion parity rule.
             _sf("url_expansion_opt_out", "BOOL"),
         ],
@@ -562,7 +562,7 @@ RAW_TABLES: dict[str, TableSpec] = {
     ),
 }
 
-# Append-only observation log (KTD4). Partitioned by observed_date; never
+# Append-only observation log. Partitioned by observed_date; never
 # expire; never rewrite. Seed identity is observed_date = first_snapshot_date
 # in the ledger, not a stored flag.
 OBSERVATION_TABLE: TableSpec = TableSpec(

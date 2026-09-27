@@ -1,0 +1,96 @@
+# The lint is advisory: a documented warning never fails rendering or the gate.
+# The production policy pin fails on an undocumented new warning, a stale
+# deferred entry, or a stale or dead allow-list entry. Fix the predicate, remove
+# an obsolete entry, or add a reasoned entry to restore agreement with the pin.
+# In multi-source SELECTs, including USING joins, an unqualified partition
+# column clears no alias. Qualify each alias in its WHERE partition predicate
+# to resolve the advisory.
+# Sources use dataset.table keys; project names can change without broadening
+# an exemption to another dataset. Allow-list and deferred pairs are disjoint.
+allowlist:
+  # R18 / KTD9: exempt only these reader/source pairs, never a table globally.
+  # Deferred references remain visible warnings in the separate list below.
+  # JOIN ON/USING alone does not satisfy the lint.
+  v_int_entities_campaign:
+    sources: [pmax_marts.int_entities_campaign, pmax_marts.int_complete_snapshot_days]
+    reason: Full snapshot history determines campaign first-seen and last-seen bounds.
+  v_int_entities_asset_group:
+    sources: [pmax_marts.int_entities_asset_group, pmax_marts.int_complete_snapshot_days]
+    reason: Full snapshot history determines asset-group first-seen and last-seen bounds.
+  v_int_entities_asset:
+    sources: [pmax_marts.int_entities_asset, pmax_marts.int_complete_snapshot_days]
+    reason: Full snapshot history determines asset first-seen and last-seen bounds.
+  v_int_entities_asset_group_signal:
+    sources: [pmax_marts.int_entities_asset_group_signal, pmax_marts.int_complete_snapshot_days]
+    reason: Full snapshot history determines signal first-seen and last-seen bounds.
+  v_int_entities_campaign_asset:
+    sources: [pmax_marts.int_entities_campaign_asset, pmax_marts.int_complete_snapshot_days]
+    reason: Full snapshot history determines campaign-asset first-seen and last-seen bounds.
+  v_int_entities_conversion_action:
+    sources: [pmax_marts.int_entities_conversion_action, pmax_marts.int_complete_snapshot_days]
+    reason: Full snapshot history determines conversion-action first-seen and last-seen bounds.
+  v_int_entities_customer:
+    sources: [pmax_marts.int_entities_customer, pmax_marts.int_complete_snapshot_days]
+    reason: Full snapshot history determines customer first-seen and last-seen bounds.
+  build_int_performance_campaign:
+    sources: [pmax_marts.v_int_entities_campaign, pmax_marts.v_int_entities_customer, pmax_marts.v_int_entities_conversion_action]
+    reason: Entity joins select attributes from full snapshot history for each performance day.
+  build_int_performance_asset_group:
+    sources: [pmax_marts.v_int_entities_asset_group, pmax_marts.v_int_entities_customer, pmax_marts.v_int_entities_conversion_action]
+    reason: Entity joins select attributes from full snapshot history for each performance day.
+  build_int_performance_asset:
+    sources: [pmax_marts.v_int_entities_asset, pmax_marts.v_int_entities_customer, pmax_marts.v_int_entities_conversion_action]
+    reason: Entity joins select attributes from full snapshot history for each performance day.
+  int_lookback_windows:
+    sources: [pmax_marts.int_entities_conversion_action]
+    reason: Full action history resolves the window in force on each click day and pre-snapshot defaults.
+  build_int_entities_campaign:
+    sources: [pmax_marts.int_complete_snapshot_days]
+    reason: int_complete_snapshot_days identifies complete campaign snapshots and the first complete day after a campaign was last observed.
+  build_int_entities_asset_group:
+    sources: [pmax_marts.int_complete_snapshot_days]
+    reason: int_complete_snapshot_days identifies complete asset-group snapshots and the first complete day after an asset group was last observed.
+  build_int_entities_asset:
+    sources: [pmax_marts.int_complete_snapshot_days, pmax_marts.stg_entities_asset_group_asset, pmax_marts.stg_entities_asset]
+    reason: int_complete_snapshot_days identifies complete days; stg_entities_asset_group_asset and stg_entities_asset supply link and attribute history for asset bounds and tombstones.
+  build_int_entities_asset_group_signal:
+    sources: [pmax_marts.int_complete_snapshot_days]
+    reason: int_complete_snapshot_days identifies complete signal snapshots and the first complete day after an asset-group signal was last observed.
+  build_int_entities_campaign_asset:
+    sources: [pmax_marts.int_complete_snapshot_days]
+    reason: int_complete_snapshot_days identifies complete campaign-asset snapshots and the first complete day after a campaign asset was last observed.
+  build_int_entities_customer_asset:
+    sources: [pmax_marts.int_complete_snapshot_days]
+    reason: int_complete_snapshot_days joins customer assets on account and snapshot date to exclude incomplete customer-asset snapshots.
+  build_int_entities_conversion_action:
+    sources: [pmax_marts.int_complete_snapshot_days]
+    reason: int_complete_snapshot_days identifies complete conversion-action snapshots and the first complete day after an action was last observed.
+  build_int_entities_customer:
+    sources: [pmax_marts.int_complete_snapshot_days]
+    reason: int_complete_snapshot_days limits customer bounds and current customer rows to complete snapshots.
+
+  int_observation_cells:
+    sources: [pmax_ops.first_snapshot]
+    reason: The once-written per-account first-run marker is keyed by account_id; its set_at partition is not knowable to the reader.
+  assert_required_tables_nonempty:
+    sources: [pmax_ops.first_snapshot]
+    reason: The once-written per-account first-run marker is keyed by account_id; its set_at partition is not knowable to the reader.
+
+# These are real warnings, not exemptions. The production test pins their exact
+# reader/source/alias/column set and requires a reason for each deferred fix.
+deferred_warnings:
+  - reader: mart_bp_campaign
+    source: pmax_marts.mart_entities_asset_group
+    alias: g
+    column: snapshot_date
+    reason: The USING join has no WHERE predicate on g.snapshot_date; the plan defers this bound.
+  - reader: mart_bp_asset_group
+    source: pmax_marts.mart_entities_campaign
+    alias: c
+    column: snapshot_date
+    reason: The USING join has no WHERE predicate on c.snapshot_date; the plan defers this bound.
+  - reader: mart_bp_extended
+    source: pmax_marts.mart_entities_asset_group
+    alias: g
+    column: snapshot_date
+    reason: The USING join has no WHERE predicate on g.snapshot_date; the plan defers this bound.

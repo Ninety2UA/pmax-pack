@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# AE13: exactly one SUCCESS and one SKIPPED across the two drill executions, regardless of which won.
+# Exactly one SUCCESS and one SKIPPED across the two drill executions, regardless of which won.
+
+# shellcheck source=looker-probes.sh
+source "${BASH_SOURCE[0]%/*}/looker-probes.sh"
 
 # shellcheck source=execution-poll.sh
 # shellcheck disable=SC1091
@@ -104,3 +107,6 @@ if (success_runs, skipped_runs, failed_runs, matched_runs) != (1, 1, 0, 2):
     )
 PY
 fi
+
+# Pass 1: positive control only, with no durable probe evidence.
+looker_probes precheck

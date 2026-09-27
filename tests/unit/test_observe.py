@@ -522,36 +522,19 @@ def test_local_observed_date_uses_utc_snapshot_partition_and_never_negative_lag(
     assert all(row[OBSERVATION_COLUMNS.index("lag")] >= 0 for row in rows)
 
 
-def test_as_of_volume_row_lands_as_lag_zero_when_observed_on_as_of() -> None:
-    """The inclusive observed-date bound keeps the current day's volume row."""
+def test_observe_excludes_lag_zero_and_rows_older_than_bound() -> None:
     connection = duckdb.connect(":memory:")
     _seed_empty_sources(connection)
-    _create_table(
-        connection,
-        "volume_asset",
-        _volume_columns("asset"),
-        [_volume_asset_row("run-today", AS_OF, 7.0)],
-    )
+    _create_table(connection, "volume_asset", _volume_columns("asset"), [
+        _volume_asset_row("run-today", AS_OF - timedelta(days=lag), 7.0)
+        for lag in (0, 1, 38, 39)
+    ])
     _complete_asset_snapshot(connection, "run-today", AS_OF, [33])
-
-    rows = _execute_select(
-        connection,
-        _params(
-            run_id="run-today",
-            observed_date=AS_OF,
-            snapshot_date=AS_OF,
-            window_start=AS_OF,
-            window_end=AS_OF,
-        ),
-    )
-
-    landed = next(
-        row
-        for row in rows
-        if row[OBSERVATION_COLUMNS.index("click_date")] == AS_OF
-        and row[OBSERVATION_COLUMNS.index("conversions")] == 7.0
-    )
-    assert landed[OBSERVATION_COLUMNS.index("lag")] == 0
+    rows = _execute_select(connection, _params(
+        run_id="run-today", observed_date=AS_OF, snapshot_date=AS_OF,
+        window_start=AS_OF - timedelta(days=38), window_end=AS_OF,
+    ))
+    assert {row[OBSERVATION_COLUMNS.index("lag")] for row in rows} == {1, 38}
 
 
 def test_first_snapshot_failure_cannot_publish_observe_success(monkeypatch) -> None:
@@ -1345,6 +1328,9 @@ def test_observe_calls_run_query_with_real_signature(bq_client, monkeypatch):
         dry_run: bool,
         timeout_seconds: float | None,
         job_labels: Any,
+        job_id_prefix: str | None = None,
+        *,
+        load_path: bool = False,
     ) -> Any:
         seen.append(
             {
@@ -1377,7 +1363,7 @@ def test_observe_calls_run_query_with_real_signature(bq_client, monkeypatch):
     assert call["params"]["snapshot_date"] != call["params"]["observed_date"]
     assert call["maximum_bytes_billed"] == DEFAULT_MAXIMUM_BYTES_BILLED
     assert call["dry_run"] is False
-    assert call["job_labels"] == {"app": "pmax", "run_id": "run-seed"}
+    assert call["job_labels"] == {"app": "pmax", "env": "prod", "run_id": "run-seed"}
     assert call["sql"].startswith("INSERT INTO")
 
 
@@ -1780,7 +1766,8 @@ def test_per_account_observed_dates_change_params_and_lags(
     assert _lag(rows_a) != _lag(rows_b)
     doc = observe_accounts.__doc__ or ""
     assert "entities_customer" in doc
-    assert "U6" in doc
+    assert "snapshot is the caller's obligation" in doc
+    assert "function does not read customer timezones" in doc
     assert "timezone" in doc.lower()
 
 def test_selection_requires_the_accounts_own_success_event():
@@ -1921,3 +1908,138 @@ def test_export_projection_matches_observation_columns():
         if c.strip()
     ]
     assert projected == list(OBSERVATION_COLUMNS)
+
+
+def test_binder_observation_bound_uses_each_accounts_local_day(bq_client):
+    stage = bind_observe_stage(
+        bq_client=bq_client, ledger=Ledger(bq_client, PROJECT, OPS),
+        project=PROJECT, raw_dataset=RAW, ops_dataset=OPS, report_bucket=BUCKET,
+        observed_date_by_account={str(ACCOUNT_ID): AS_OF + timedelta(days=1)},
+        observation_days=38,
+    )
+    ctx = _ctx(window_start=AS_OF - timedelta(days=90))
+    stage.fn(ctx)
+    cfg = next(cfg for sql, cfg in zip(bq_client.queries, bq_client.job_configs)
+               if sql.startswith("INSERT INTO"))
+    params = {p.name: p.value for p in cfg.query_parameters}
+    assert params["window_start"] == AS_OF + timedelta(days=1) - timedelta(days=38)
+    assert params["window_start"] > ctx.window_start
+    assert params["observed_date"] == AS_OF + timedelta(days=1)
+    assert params["window_end"] == ctx.window_end
+
+
+@pytest.mark.parametrize(("local_offset", "expected_offset"), [(-1, 0), (1, 1)])
+def test_binder_local_day_clamps_only_below_fetch_start(
+    monkeypatch, local_offset, expected_offset,
+):
+    captured = {}
+    def observe(**kwargs):
+        captured.update(kwargs)
+        return {"observe_jobs": 1, "export_warnings": 0}
+    monkeypatch.setattr("pmax_pack.observe.observe_accounts", observe)
+    ctx = _ctx(window_start=AS_OF - timedelta(days=30), window_end=AS_OF)
+    stage = bind_observe_stage(
+        bq_client=object(), ledger=object(), project=PROJECT, raw_dataset=RAW,
+        ops_dataset=OPS, report_bucket=BUCKET, observation_days=30,
+        observed_date_by_account={ACCOUNT: AS_OF + timedelta(days=local_offset)},
+    )
+    stage.fn(ctx)
+    assert captured["window_start"] == ctx.window_start + timedelta(days=expected_offset)
+
+
+def test_trailing_local_day_never_synthesizes_zero_before_fetch(monkeypatch):
+    with duckdb.connect() as connection:
+        _seed_empty_sources(connection)
+        fetch_start = AS_OF - timedelta(days=30)
+        missing_day = fetch_start - timedelta(days=1)
+        observed_date = AS_OF - timedelta(days=1)
+        _create_table(connection, "raw_observations", _obs_columns(), [
+            _obs_row(run_id="run-prior", observed_date=observed_date - timedelta(days=1),
+                     click_date=day, conversions=6.0, asset_id=33)
+            for day in (missing_day, fetch_start)
+        ])
+        _create_table(connection, "stages", _stage_columns(), [
+            ("run-prior", "observe", "SUCCESS", ACCOUNT_ID),
+        ])
+        _complete_asset_snapshot(connection, "run-today", AS_OF, [33])
+        rows = []
+        def execute_observe(**kwargs):
+            rows.extend(_execute_select(connection, _params(
+                run_id="run-today", observed_date=observed_date, snapshot_date=AS_OF,
+                window_start=kwargs["window_start"], window_end=kwargs["window_end"],
+            )))
+            return {"observe_jobs": 1, "export_warnings": 0}
+        monkeypatch.setattr("pmax_pack.observe.observe_accounts", execute_observe)
+        stage = bind_observe_stage(
+            bq_client=object(), ledger=object(), project=PROJECT, raw_dataset=RAW,
+            ops_dataset=OPS, report_bucket=BUCKET, observation_days=30,
+            observed_date_by_account={ACCOUNT: observed_date},
+        )
+        stage.fn(_ctx(window_start=fetch_start, window_end=AS_OF))
+        click_dates = {row[OBSERVATION_COLUMNS.index("click_date")] for row in rows}
+        assert click_dates == {fetch_start}
+        assert all(row[OBSERVATION_COLUMNS.index("conversions")] == 0 for row in rows)
+
+
+def test_prior_lag_zero_never_carries_as_synthetic_zero():
+    with duckdb.connect() as connection:
+        _seed_empty_sources(connection)
+        _create_table(connection, "raw_observations", _obs_columns(), [
+            _obs_row(run_id="run-prior", observed_date=AS_OF,
+                     click_date=AS_OF - timedelta(days=lag), conversions=6.0, asset_id=33)
+            for lag in (0, 1)
+        ])
+        _create_table(connection, "stages", _stage_columns(), [
+            ("run-prior", "observe", "SUCCESS", ACCOUNT_ID),
+        ])
+        _complete_asset_snapshot(connection, "run-today", AS_OF, [33])
+        rows = _execute_select(connection, _params(run_id="run-today", window_end=AS_OF))
+        assert {row[OBSERVATION_COLUMNS.index("lag")] for row in rows} == {1}
+        assert all(row[OBSERVATION_COLUMNS.index("conversions")] == 0 for row in rows)
+
+
+def test_observe_and_export_jobs_share_env_labels_and_bytes_cap(bq_client):
+    from pmax_pack.labels import label_value
+    run_id = "Run / With Spaces"
+    stage = bind_observe_stage(
+        bq_client=bq_client, ledger=Ledger(bq_client, PROJECT, OPS),
+        project=PROJECT, raw_dataset=RAW, ops_dataset=OPS, report_bucket=BUCKET,
+        env="verify", maximum_bytes_billed=1234, observation_days=30,
+    )
+    stage.fn(_ctx(run_id=run_id))
+    jobs = [(sql, cfg) for sql, cfg in zip(bq_client.queries, bq_client.job_configs)
+            if sql.startswith("INSERT INTO") or sql.startswith("EXPORT DATA")]
+    assert len(jobs) == 2
+    for sql, cfg in jobs:
+        assert cfg.labels == {"app": "pmax", "env": "verify", "run_id": label_value(run_id)}
+        assert cfg.maximum_bytes_billed == 1234
+
+
+def test_binder_two_local_days_keep_each_accounts_bound_and_observed_date(bq_client):
+    local_dates = {ACCOUNT: AS_OF - timedelta(days=1), ACCOUNT_B: AS_OF + timedelta(days=1)}
+    ctx = _ctx(
+        accounts_configured=[ACCOUNT, ACCOUNT_B],
+        accounts_resolved=[ACCOUNT, ACCOUNT_B],
+        window_start=AS_OF - timedelta(days=90),
+    )
+    stage = bind_observe_stage(
+        bq_client=bq_client, ledger=Ledger(bq_client, PROJECT, OPS),
+        project=PROJECT, raw_dataset=RAW, ops_dataset=OPS, report_bucket=BUCKET,
+        observed_date_by_account=local_dates, observation_days=38,
+    )
+    assert stage.fn(ctx) == {"observe_jobs": 2, "export_warnings": 0}
+    inserted = [
+        {param.name: param.value for param in cfg.query_parameters}
+        for sql, cfg in zip(bq_client.queries, bq_client.job_configs)
+        if sql.startswith("INSERT INTO")
+    ]
+    assert len(inserted) == 2
+    assert {
+        params["account_id"]: (params["window_start"], params["observed_date"])
+        for params in inserted
+    } == {
+        ACCOUNT_ID: (AS_OF - timedelta(days=39), AS_OF - timedelta(days=1)),
+        ACCOUNT_B_ID: (AS_OF - timedelta(days=37), AS_OF + timedelta(days=1)),
+    }
+    assert all(params["window_start"] > ctx.window_start for params in inserted)
+    assert all(params["window_end"] == ctx.window_end for params in inserted)

@@ -29,6 +29,8 @@ def _inputs():
         deployment=SimpleNamespace(project="fixture-project"),
         datasets=Datasets(),
         cohort_days=[1, 7, 30],
+        reporting_window_days=90,
+        storage="window",
         restatement_margin_days=7,
         tolerances=Tolerances(),
     )
@@ -80,9 +82,14 @@ def test_volatility_self_mutation_is_detected() -> None:
             assert not FORBIDDEN.search(planted)
 
 
-def _assertion_sql(name: str, *, restatement_margin_days: int = 7) -> str:
+def _assertion_sql(
+    name: str, *, restatement_margin_days: int = 7,
+    cohort_days: list[int] | None = None,
+) -> str:
     config, ctx = _inputs()
     config.restatement_margin_days = restatement_margin_days
+    if cohort_days is not None:
+        config.cohort_days = cohort_days
     manifest = load_manifest(MANIFEST)
     step = next(step for step in manifest.steps if step.name == name)
     sql = render(step, config, ctx)
@@ -236,6 +243,32 @@ INSERT INTO mart_performance_asset_group VALUES
   (DATE '2026-08-25', 1, 7, 71, 'SEARCH', 'NETWORK', NULL, 5.5, 11, 5.5, 11, 0, 0);
 """
     )
+    con.execute(
+        "ALTER TABLE mart_cohort_campaign ADD COLUMN provenance VARCHAR DEFAULT 'measured'"
+    )
+    con.execute(
+        "ALTER TABLE mart_cohort_asset_group ADD COLUMN provenance VARCHAR DEFAULT 'measured'"
+    )
+    for grain in ("campaign", "asset_group"):
+        con.execute(
+            f"ALTER TABLE mart_cohort_{grain} ADD COLUMN "
+            "window_provenance VARCHAR DEFAULT 'observed'"
+        )
+        group_column = "asset_group_id BIGINT, " if grain == "asset_group" else ""
+        con.execute(
+            f"CREATE TABLE stg_lag_{grain} ("
+            f"date DATE, account_id BIGINT, campaign_id BIGINT, {group_column}"
+            "ad_network_type VARCHAR, conversion_action VARCHAR, "
+            "conversion_lag_bucket VARCHAR, conversions DOUBLE, "
+            "conversions_value DOUBLE, all_conversions DOUBLE, "
+            "all_conversions_value DOUBLE)"
+        )
+    con.execute(
+        "CREATE TABLE int_lookback_windows (click_date DATE, account_id BIGINT, "
+        "metric_basis VARCHAR, conversion_action_resource_name VARCHAR, "
+        "click_through_lookback_window_days BIGINT, "
+        "include_in_conversions_metric BOOLEAN)"
+    )
     assert _result(con, "assert_cross_grain_identity") is True
     assert _result(con, "assert_cohort_reconciliation") is True
 
@@ -331,7 +364,7 @@ INSERT INTO mart_entities_campaign VALUES
     assert _result(con, "assert_serving_budget_has_cost") is True
 
 
-def test_cohort_observation_alarm_is_d1_anchored_and_full_outer() -> None:
+def test_cohort_observation_alarm_is_d0_d1_anchored_and_full_outer() -> None:
     con = duckdb.connect()
     con.execute(
         """
@@ -349,26 +382,28 @@ CREATE TABLE mart_cohort_asset_group (
   cohorted_conversions DOUBLE, cohorted_value DOUBLE, provenance VARCHAR
 );
 INSERT INTO int_observation_cells VALUES
-  (DATE '2026-08-25', 1, 7, 70, 'SEARCH', 'PRIMARY', NULL, 1,
+  (DATE '2026-08-25', 1, 7, 70, 'SEARCH', 'PRIMARY', NULL, 0,
     2, 4, 'asset_group', 'measured'),
-  (DATE '2026-08-25', 1, 7, 70, 'SEARCH', 'PRIMARY', NULL, 30,
+  (DATE '2026-08-25', 1, 7, 70, 'SEARCH', 'PRIMARY', NULL, 1,
     5, 10, 'asset_group', 'measured'),
-  (DATE '2026-08-25', 1, 7, 71, 'SEARCH', 'PRIMARY', NULL, 1,
+  (DATE '2026-08-25', 1, 7, 71, 'SEARCH', 'PRIMARY', NULL, 0,
     NULL, NULL, 'asset_group', 'unavailable'),
-  (DATE '2026-08-25', 1, 7, 72, 'SEARCH', 'PRIMARY', NULL, 1,
+  (DATE '2026-08-25', 1, 7, 72, 'SEARCH', 'PRIMARY', NULL, 0,
     3, 6, 'asset_group', 'carried');
 INSERT INTO mart_cohort_asset_group VALUES
   (DATE '2026-08-25', 1, 7, 70, 'SEARCH', 'PRIMARY', NULL, 1, 2, 4, 'measured'),
-  (DATE '2026-08-25', 1, 7, 70, 'SEARCH', 'PRIMARY', NULL, 30, 9, 18, 'measured'),
+  (DATE '2026-08-25', 1, 7, 70, 'SEARCH', 'PRIMARY', NULL, 2, 9, 18, 'measured'),
   (DATE '2026-08-25', 1, 7, 71, 'SEARCH', 'PRIMARY', NULL, 1, 9, 18, 'measured'),
   (DATE '2026-08-25', 1, 7, 72, 'SEARCH', 'PRIMARY', NULL, 1, 3, 6, 'measured');
 """
     )
-    row = _assertion_row(con, "assert_cohort_observation_reconciliation")
+    rendered = _assertion_sql(
+        "assert_cohort_observation_reconciliation", cohort_days=[0, 1, 2, 3],
+    )
+    row = con.execute(rendered).fetchone()
     assert bool(row[0]) is True
     assert int(row[1]) == 1
 
-    rendered = _assertion_sql("assert_cohort_observation_reconciliation")
     mutant = rendered.replace("WHERE u.click_date IS NULL", "WHERE TRUE")
     assert mutant != rendered
     with pytest.raises(AssertionError):
@@ -378,7 +413,7 @@ INSERT INTO mart_cohort_asset_group VALUES
         "UPDATE mart_cohort_asset_group SET cohorted_conversions = 3 "
         "WHERE cohort_day = 1"
     )
-    assert _result(con, "assert_cohort_observation_reconciliation") is False
+    assert bool(con.execute(rendered).fetchone()[0]) is False
 
     con.execute("DELETE FROM mart_cohort_asset_group WHERE cohort_day = 1")
-    assert _result(con, "assert_cohort_observation_reconciliation") is False
+    assert bool(con.execute(rendered).fetchone()[0]) is False

@@ -1,26 +1,27 @@
 """Stage list, run context, checkpoint hash, and stage runner.
 
 STAGES_BY_MODE is the single ordered table every entry point resolves.
-KTD5 vocabulary: extract, load, observe, score, lag, cohort, validate,
-report. Additions (documented): backfill (R3 monthly chunks after the
-daily observe), parity (parity CLI mode). probe and report write no
-ledger events. Walking the real CLI entry points is deferred to U6.
+The shared stages cover extraction, loading, observation, scoring, lag,
+cohorts, validation, publishing, and reporting. Monthly backfill follows daily
+observation; parity has its own CLI mode. Probe and report write no ledger events.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
+import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from pmax_pack.redact import redact
+from pmax_pack.runner import DEFAULT_MAXIMUM_BYTES_BILLED, JobAccounting
 
 log = logging.getLogger(__name__)
 
-# KTD5 names plus documented additions backfill and parity.
+# The ordered stage list shared by every pipeline entry point.
 STAGES_BY_MODE: dict[str, tuple[str, ...]] = {
     "run": (
         "extract",
@@ -31,6 +32,7 @@ STAGES_BY_MODE: dict[str, tuple[str, ...]] = {
         "lag",
         "cohort",
         "validate",
+        "publish",
         "report",
     ),
     "backfill": (
@@ -39,6 +41,7 @@ STAGES_BY_MODE: dict[str, tuple[str, ...]] = {
         "lag",
         "cohort",
         "validate",
+        "publish",
         "report",
     ),
     "rebuild": (
@@ -46,6 +49,7 @@ STAGES_BY_MODE: dict[str, tuple[str, ...]] = {
         "lag",
         "cohort",
         "validate",
+        "publish",
         "report",
     ),
     "parity": ("parity",),
@@ -70,6 +74,8 @@ class RunContext:
     window_end: date
     timezone: str
     dry_run: bool
+    accounting: JobAccounting | None = None
+    timings: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -96,9 +102,12 @@ def run_mode(
     acquire_lease: bool = True,
     now_fn: Callable[[], datetime] | None = None,
     has_pending_backfill: bool = False,
+    monotonic_fn: Callable[[], float] | None = None,
+    preflight: Stage | None = None,
 ) -> str:
     """Resolve one mode through STAGES_BY_MODE and run the selected stages.
 
+    An optional preflight runs under the same lease before the mode's stages.
     Verification-dataset rebuilds set ``acquire_lease`` false. They still use
     the same ordered stage registry but cannot touch the live lease object.
     Their run-id report remains the execution record.
@@ -109,6 +118,8 @@ def run_mode(
             selected.append(stage_registry[name])
         except KeyError as exc:
             raise ValueError(f"mode {mode}: stage {name} is not bound") from exc
+    if preflight is not None:
+        selected.insert(0, preflight)
     lease_mode = _lease_mode(mode)
     if mode in {"run", "backfill"} and has_pending_backfill:
         lease_mode = "first_run"
@@ -120,27 +131,25 @@ def run_mode(
         now_fn=now_fn,
         lease_mode=lease_mode,
         acquire_lease=acquire_lease,
+        monotonic_fn=monotonic_fn,
     )
 
 
 def compute_checkpoint_hash(
     query_texts: Sequence[str],
     api_version: str,
-    start_date: date | str,
 ) -> str:
-    """sha256 of the query set, API version, and configured start.
+    """Return sha256 of the family A, B, C texts and API version only.
 
     Computed once at run start and passed down on RunContext so the
     loader never reads query files. Material is json.dumps with sorted
     keys so a single string containing a newline cannot collide with
     two adjacent strings.
     """
-    start = start_date if isinstance(start_date, str) else start_date.isoformat()
     material = json.dumps(
         {
             "api_version": api_version,
             "query_texts": list(query_texts),
-            "start_date": start,
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -207,23 +216,26 @@ def run_stages(
     now_fn: Callable[[], datetime] | None = None,
     lease_mode: str | None = None,
     acquire_lease: bool = True,
+    monotonic_fn: Callable[[], float] | None = None,
 ) -> str:
     """Run an ordered stage list with guarded ledger and optional lease events.
 
     now_fn is sampled fresh at every event write and every lease
     renewal. On a held lease: write only a SKIPPED exit event and a
-    SKIPPED lease event and return SKIPPED (AE13). On exception:
+    SKIPPED lease event and return SKIPPED. On exception:
     guarded FAILED stage and FAILED run exit naming the stage reached,
     best-effort lease release, re-raise. probe and report skip ledger
     and lease writes. run_started lives inside the guarded region so a
     ledger failure still releases the lease.
     """
     clock = now_fn or _default_now
+    monotonic = monotonic_fn or time.monotonic
     if ctx.mode in _NO_LEDGER_MODES:
         for stage in stages:
             stage.fn(ctx)
         return "SUCCESS"
 
+    ctx.timings["lease_started"] = monotonic()
     if acquire_lease:
         acquired = lease.acquire(
             ctx.run_id, lease_mode or _lease_mode(ctx.mode), clock()
@@ -242,6 +254,40 @@ def run_stages(
             return "SKIPPED"
 
     reached: str | None = None
+    stage_started: float | None = None
+
+    def finish_detail(result: Any) -> str:
+        """Merge timing and counters with returned or failure-specific detail."""
+        detail: dict[str, Any] = {}
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except (ValueError, TypeError):
+                pass
+        if isinstance(result, Mapping):
+            detail.update(result)
+        elif result is not None:
+            detail["result"] = result
+        seconds = (
+            max(0.0, monotonic() - stage_started)
+            if stage_started is not None else 0.0
+        )
+        ctx.timings.setdefault("stages", {})[reached] = seconds
+        detail["duration_seconds"] = seconds
+        if ctx.accounting is not None:
+            detail.update(ctx.accounting.snapshot(reached))
+        return json.dumps(detail)
+
+    def finish_span() -> None:
+        """Mark the stage-to-tail boundary exactly once, including failures."""
+        if (
+            "run_started" in ctx.timings
+            and "stage_span_finished" not in ctx.timings
+        ):
+            ctx.timings["stage_span_finished"] = monotonic()
+        if ctx.accounting is not None:
+            ctx.accounting.set_stage("tail")
+
     try:
         if acquire_lease:
             if lease.crashed_run is not None:
@@ -261,10 +307,14 @@ def run_stages(
                     event="ACQUIRED",
                     now=clock(),
                 )
+        ctx.timings["run_started"] = monotonic()
         ledger.run_started(**exit_kwargs(ctx, clock()))
         try:
             for stage in stages:
                 reached = stage.name
+                if ctx.accounting is not None:
+                    ctx.accounting.set_stage(stage.name)
+                stage_started = monotonic()
                 if acquire_lease:
                     lease.renew(clock())
                     _emit_lease_event(
@@ -278,11 +328,7 @@ def run_stages(
                     ctx.run_id, stage.name, account_id=None, now=clock()
                 )
                 result = stage.fn(ctx)
-                detail: str | None = None
-                if isinstance(result, str):
-                    detail = result
-                elif result is not None:
-                    detail = json.dumps(result)
+                detail = finish_detail(result)
                 ledger.stage_finished(
                     ctx.run_id,
                     stage.name,
@@ -295,6 +341,7 @@ def run_stages(
             # This stage-level SUCCESS exit carries no report URI; the CLI
             # appends the linked exit event WITH the URI right after the
             # report publishes, and latest-per-key readers prefer that row.
+            finish_span()
             ledger.run_exited(
                 status="SUCCESS",
                 stage_reached=reached,
@@ -312,7 +359,7 @@ def run_stages(
                         reached,
                         "FAILED",
                         account_id=None,
-                        detail=None,
+                        detail=finish_detail(getattr(exc, "stage_detail", None)),
                         error=err,
                         now=clock(),
                     )
@@ -321,6 +368,7 @@ def run_stages(
                         "failed to write FAILED stage event: %s",
                         redact(str(write_exc)),
                     )
+            finish_span()
             try:
                 ledger.run_exited(
                     status="FAILED",
@@ -336,6 +384,7 @@ def run_stages(
                 )
             raise
     finally:
+        finish_span()
         try:
             if acquire_lease and lease.generation is not None:
                 snapshot_holder = dict(lease.holder or {})
@@ -393,22 +442,41 @@ def bind_load_stage(
     staging: Any,
     project: str,
     dataset: str,
+    env: str = "prod",
+    storage: str = "window",
+    maximum_bytes_billed: int = DEFAULT_MAXIMUM_BYTES_BILLED,
+    timeout_seconds: float = 300,
+    now_fn: Callable[[], datetime] | None = None,
 ) -> Stage:
-    """Thin load stage: flush staged (table, day) partitions once."""
+    """Sweep orphan landings, flush all tables, and record load-path jobs."""
 
     def _fn(ctx: RunContext) -> dict[str, int]:
-        from pmax_pack.loader import flush_staged
+        from pmax_pack.extract import close_staging
+        from pmax_pack.loader import flush_staged, sweep_landing_tables
         from pmax_pack.schema import RAW_TABLES
 
-        n = flush_staged(
-            bq_client,
-            staging,
-            project=project,
-            dataset=dataset,
-            window_start=ctx.window_start,
-            specs=RAW_TABLES,
-        )
-        return {"load_jobs": n}
+        try:
+            sweep_landing_tables(
+                bq_client, project=project, dataset=dataset, run_id=ctx.run_id,
+            )
+            n = flush_staged(
+                bq_client,
+                staging,
+                project=project,
+                dataset=dataset,
+                window_start=ctx.window_start,
+                specs=RAW_TABLES,
+                run_id=ctx.run_id,
+                as_of=ctx.as_of,
+                env=env,
+                storage=storage,
+                maximum_bytes_billed=maximum_bytes_billed,
+                timeout_seconds=timeout_seconds,
+                now_fn=now_fn or _default_now,
+            )
+            return {"load_path_jobs": n}
+        finally:
+            close_staging(staging)
 
     return Stage("load", _fn)
 
@@ -424,6 +492,8 @@ def bind_observe_stage(
     maximum_bytes_billed: int | None = None,
     observed_date_by_account: Mapping[str, date] | None = None,
     snapshot_date: date | None = None,
+    observation_days: int | None = None,
+    env: str = "prod",
     export_timeout_seconds: float | None = None,
 ) -> Stage:
     """Thin observe stage: one INSERT ... SELECT per resolved account.
@@ -431,7 +501,9 @@ def bind_observe_stage(
     Default observed_date is ctx.as_of for every resolved account.
     ``observed_date_by_account`` overrides individual accounts. Real
     per-account timezone resolution from the entities_customer snapshot
-    is the U6 caller's obligation; this binder does not read it.
+    is the caller's obligation; this binder does not read it. The observation
+    bound is measured from each account's local observed date and clamped
+    to the fetched interval so missing unfetched days cannot become zeros.
     """
 
     def _fn(ctx: RunContext) -> dict[str, int]:
@@ -442,25 +514,38 @@ def bind_observe_stage(
             str(account): overrides.get(str(account), ctx.as_of)
             for account in ctx.accounts_resolved
         }
-        return observe_accounts(
-            bq_client=bq_client,
-            ledger=ledger,
-            project=project,
-            raw_dataset=raw_dataset,
-            ops_dataset=ops_dataset,
-            report_bucket=report_bucket,
-            accounts=list(ctx.accounts_resolved),
-            run_id=ctx.run_id,
-            observed_dates=observed_dates,
-            window_start=ctx.window_start,
-            window_end=ctx.window_end,
-            snapshot_date=(
-                snapshot_date if snapshot_date is not None else ctx.as_of
-            ),
-            dry_run=ctx.dry_run,
-            maximum_bytes_billed=maximum_bytes_billed,
-            export_timeout_seconds=export_timeout_seconds,
-        )
+        accounts_by_day: dict[date, list[str]] = {}
+        for account, observed_date in observed_dates.items():
+            accounts_by_day.setdefault(observed_date, []).append(account)
+        detail = {"observe_jobs": 0, "export_warnings": 0}
+        for observed_date, accounts in accounts_by_day.items():
+            observation_start = (
+                max(observed_date - timedelta(days=observation_days), ctx.window_start)
+                if observation_days is not None else ctx.window_start
+            )
+            result = observe_accounts(
+                bq_client=bq_client,
+                ledger=ledger,
+                project=project,
+                raw_dataset=raw_dataset,
+                ops_dataset=ops_dataset,
+                report_bucket=report_bucket,
+                accounts=accounts,
+                run_id=ctx.run_id,
+                observed_dates=observed_dates,
+                window_start=observation_start,
+                window_end=ctx.window_end,
+                snapshot_date=(
+                    snapshot_date if snapshot_date is not None else ctx.as_of
+                ),
+                dry_run=ctx.dry_run,
+                maximum_bytes_billed=maximum_bytes_billed,
+                export_timeout_seconds=export_timeout_seconds,
+                env=env,
+            )
+            for key in detail:
+                detail[key] += result[key]
+        return detail
 
     return Stage("observe", _fn)
 
@@ -480,8 +565,18 @@ def bind_backfill_stage(
     """Thin backfill stage: pending monthly chunks, then checkpoints."""
 
     def _fn(ctx: RunContext) -> dict[str, Any]:
-        from pmax_pack.extract import run_backfill
+        from pmax_pack.extract import backfill_plan, run_backfill
 
+        selected_plan_accounts = (
+            list(plan_accounts)
+            if plan_accounts is not None
+            else list(ctx.accounts_resolved)
+        )
+        selected_plan = plan or backfill_plan(
+            config, ctx.as_of, ledger, accounts=selected_plan_accounts,
+            checkpoint_hash=ctx.checkpoint_hash,
+        )
+        pending_before = len(selected_plan.pending)
         n = run_backfill(
             config=config,
             run_date=ctx.as_of,
@@ -493,15 +588,20 @@ def bind_backfill_stage(
             run_id=ctx.run_id,
             loaded_at=loaded_at_fn(),
             checkpoint_hash=ctx.checkpoint_hash,
-            plan=plan,
+            plan=selected_plan,
             lease=lease,
             now_fn=now_fn,
+            include_entities=ctx.mode == "backfill",
         )
-        selected_plan_accounts = (
-            list(plan_accounts)
-            if plan_accounts is not None
-            else list(ctx.accounts_resolved)
+        after = backfill_plan(
+            config, ctx.as_of, ledger, accounts=selected_plan_accounts,
+            checkpoint_hash=ctx.checkpoint_hash,
         )
-        return {"load_jobs": n, "plan_accounts": selected_plan_accounts}
+        return {
+            "load_path_jobs": n,
+            "plan_accounts": selected_plan_accounts,
+            "pending_before": pending_before,
+            "pending_after": len(after.pending),
+        }
 
     return Stage("backfill", _fn)

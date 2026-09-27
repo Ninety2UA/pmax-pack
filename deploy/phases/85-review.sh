@@ -12,9 +12,9 @@ PARITY_RECORD="$RECORD_DIR/parity-evidence-$IMAGE_RECORD_KEY.json"
 VALIDATION_RECORD="$RECORD_DIR/signed-review-validation-$IMAGE_RECORD_KEY.json"
 EXPECTED_REVIEW="$WORK_DIR/signed-review-expected.json"
 
-# Until the first-run review is validated, later invocations must keep binding
-# the signature to that immutable record even though phase 70 now runs rebuild.
-if [[ -f "$FIRST_RUN_RECORD" && ! -f "$VALIDATION_RECORD" ]]; then
+# Until the first deployment completes phase 95, retries keep binding the
+# signature to its immutable first-run record even after phase 85 validation.
+if [[ -f "$FIRST_RUN_RECORD" && ( "${FIRST_DEPLOY_CONTINUATION:-0}" == 1 || ! -f "$VALIDATION_RECORD" ) ]]; then
   RUN_RECORD="$FIRST_RUN_RECORD"
 elif [[ -f "$UPGRADE_RECORD" ]]; then
   RUN_RECORD="$UPGRADE_RECORD"

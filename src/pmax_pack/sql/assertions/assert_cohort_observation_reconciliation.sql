@@ -1,4 +1,15 @@
 WITH
+configured_days AS (
+{% for day in cohort_days %}
+  SELECT {{ day }} AS cohort_day{% if not loop.last %} UNION ALL{% endif %}
+{% endfor %}
+),
+configured_pairs AS (
+  SELECT s.cohort_day
+  FROM configured_days AS s
+  INNER JOIN configured_days AS b
+    ON b.cohort_day = s.cohort_day + 1
+),
 snapshot_cells AS (
   SELECT
     click_date,
@@ -13,7 +24,9 @@ snapshot_cells AS (
     SUM(cohorted_value) AS conversions_value
   FROM `{{ project }}.{{ marts_dataset }}.int_observation_cells`
   WHERE click_date BETWEEN
-    DATE_SUB(@as_of, INTERVAL {{ cohort_days|max }} DAY) AND @as_of
+    DATE_SUB(@as_of,
+      INTERVAL {{ [window_days, (cohort_days|max) + 1]|min }} DAY) AND @as_of
+    AND cohort_day IN (SELECT cohort_day FROM configured_pairs)
     AND grain = 'asset_group'
     AND provenance IN ('measured', 'carried')
   GROUP BY click_date, account_id, campaign_id, asset_group_id,
@@ -32,7 +45,9 @@ unavailable_snapshot_keys AS (
     cohort_day
   FROM `{{ project }}.{{ marts_dataset }}.int_observation_cells`
   WHERE click_date BETWEEN
-    DATE_SUB(@as_of, INTERVAL {{ cohort_days|max }} DAY) AND @as_of
+    DATE_SUB(@as_of,
+      INTERVAL {{ [window_days, (cohort_days|max) + 1]|min }} DAY) AND @as_of
+    AND cohort_day IN (SELECT cohort_day FROM configured_pairs)
     AND grain = 'asset_group'
     AND provenance = 'unavailable'
 ),
@@ -50,7 +65,9 @@ bucket_cells AS (
     SUM(cohorted_value) AS conversions_value
   FROM `{{ project }}.{{ marts_dataset }}.mart_cohort_asset_group`
   WHERE click_date BETWEEN
-    DATE_SUB(@as_of, INTERVAL {{ cohort_days|max }} DAY) AND @as_of
+    DATE_SUB(@as_of,
+      INTERVAL {{ [window_days, (cohort_days|max) + 1]|min }} DAY) AND @as_of
+    AND cohort_day IN (SELECT cohort_day + 1 FROM configured_pairs)
     AND provenance IN ('measured', 'carried')
   GROUP BY click_date, account_id, campaign_id, asset_group_id,
     ad_network_type, metric_basis, conversion_action_resource_name,
@@ -58,7 +75,7 @@ bucket_cells AS (
 ),
 compared AS (
   SELECT
-    COALESCE(s.cohort_day, b.cohort_day) AS cohort_day,
+    COALESCE(s.cohort_day, b.cohort_day - 1) AS cohort_day,
     ABS(COALESCE(s.conversions, 0) - COALESCE(b.conversions, 0))
       > {{ tolerances.cross_grain }}
       OR ABS(
@@ -74,7 +91,7 @@ compared AS (
     AND b.metric_basis = s.metric_basis
     AND b.conversion_action_resource_name IS NOT DISTINCT FROM
       s.conversion_action_resource_name
-    AND b.cohort_day = s.cohort_day
+    AND b.cohort_day = s.cohort_day + 1
   LEFT JOIN unavailable_snapshot_keys AS u
     ON u.click_date = COALESCE(s.click_date, b.click_date)
     AND u.account_id = COALESCE(s.account_id, b.account_id)
@@ -88,12 +105,15 @@ compared AS (
         s.conversion_action_resource_name,
         b.conversion_action_resource_name
       )
-    AND u.cohort_day = COALESCE(s.cohort_day, b.cohort_day)
+    AND u.cohort_day = COALESCE(s.cohort_day, b.cohort_day - 1)
   WHERE u.click_date IS NULL
 )
 SELECT
-  COUNTIF(cohort_day = 1 AND differs) = 0 AS passed,
-  COUNTIF(cohort_day > 1 AND differs) AS observed,
+  IF(NOT EXISTS (SELECT 1 FROM configured_pairs), NULL,
+    COUNTIF(cohort_day = 0 AND differs) = 0) AS passed,
+  COUNTIF(cohort_day > 0 AND differs) AS observed,
   0 AS expected,
-  'D1 cells must reconcile; observed reports deeper-day divergence' AS detail
+  IF(NOT EXISTS (SELECT 1 FROM configured_pairs),
+    'no reconciliation pair in the configured ladder',
+    'D0/D1 cells must reconcile; observed reports deeper-pair divergence') AS detail
 FROM compared

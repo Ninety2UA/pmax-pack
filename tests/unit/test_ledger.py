@@ -615,11 +615,11 @@ def test_default_clock_samples_fresh_per_event(bq_client):
     assert all("." in s for s in stamps)
 
 
-def test_first_snapshot_docstrings_record_ktd4_write_once():
-    date_doc = Ledger.first_snapshot_date.__doc__ or ""
+def test_first_snapshot_docstrings_record_success_gated_write_once():
+    date_doc = " ".join((Ledger.first_snapshot_date.__doc__ or "").split())
     set_doc = Ledger.set_first_snapshot.__doc__ or ""
-    assert "BY DESIGN" in date_doc
-    assert "KTD4" in date_doc
+    assert "observed_date equals this account's first valid snapshot date" in date_doc
+    assert "orphaned marker cannot bind a seed" in date_doc
     assert "earliest-per-key" in date_doc
     assert "serialized by the lease" in set_doc
     assert "earliest-wins" in set_doc
@@ -841,3 +841,160 @@ def test_conftest_fakes_have_no_catch_all_kwargs():
     assert insert_params[1:3] == ["table", "json_rows"]
     query_params = list(inspect.signature(FakeBQClient.query).parameters)
     assert query_params[1:3] == ["query", "job_config"]
+
+
+class CheckpointBQ:
+    """Execute production checkpoint SQL locally, including the reset transaction."""
+
+    def __init__(self):
+        import duckdb
+        self.connection = duckdb.connect(config={"threads": 1})
+        self.connection.execute("""
+            CREATE TABLE load_checkpoints (
+                account_id BIGINT, chunk VARCHAR, family VARCHAR,
+                checkpoint_hash VARCHAR, run_id VARCHAR, completed_at TIMESTAMP
+            );
+            CREATE TABLE stages (
+                run_id VARCHAR, stage VARCHAR, status VARCHAR, account_id BIGINT,
+                detail VARCHAR, error VARCHAR, event_ts TIMESTAMP
+            );
+        """)
+        self.queries = []
+        self.job_configs = []
+        self.metadata_reads = []
+        self.streaming_buffer = None
+        self.query_error = None
+
+    def get_table(self, table):
+        from types import SimpleNamespace
+        self.metadata_reads.append(table)
+        return SimpleNamespace(streaming_buffer=self.streaming_buffer)
+
+    def insert_rows_json(self, table, rows):
+        name = table.rsplit(".", 1)[-1]
+        for row in rows:
+            columns = ", ".join(row)
+            placeholders = ", ".join("?" for _ in row)
+            self.connection.execute(
+                f"INSERT INTO {name} ({columns}) VALUES ({placeholders})", list(row.values()),
+            )
+        return []
+
+    def query(self, sql, job_config=None):
+        import re
+        from sqlglot import transpile
+        from types import SimpleNamespace
+        self.queries.append(sql)
+        self.job_configs.append(job_config)
+        if self.query_error is not None:
+            raise self.query_error
+        localized = re.sub(r"`[^`]+\.([A-Za-z_][A-Za-z0-9_]*)`", r'"\1"', sql)
+        for param in job_config.query_parameters:
+            value = param.value
+            literal = str(value) if isinstance(value, int) else "'" + str(value).replace("'", "''") + "'"
+            localized = re.sub(r"@" + param.name + r"\b", lambda m: literal, localized)
+        rows = []
+        try:
+            for statement in transpile(localized, read="bigquery", write="duckdb"):
+                cursor = self.connection.execute(statement)
+                columns = [column[0] for column in cursor.description]
+                rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        except Exception:
+            if "BEGIN TRANSACTION" in sql:
+                self.connection.execute("ROLLBACK")
+            raise
+        return SimpleNamespace(result=lambda: rows)
+
+
+def test_checkpoint_reset_deletes_all_hashes_for_only_one_account_chunk():
+    import json
+    client = CheckpointBQ()
+    ledger = Ledger(client, "example-project", "pmax_ops", now_fn=lambda: NOW)
+    for account in (101, 202):
+        for chunk in ("2026-06", "2026-07", "2026-08"):
+            for family in ("A", "B", "C"):
+                for checkpoint_hash in ("old", "current"):
+                    ledger.checkpoint_done(account, chunk, family, checkpoint_hash, "load")
+    ledger.reset_checkpoint(101, "2026-07", "reset-run")
+    assert ledger.pending_chunks(101, date(2023, 7, 1), "current",
+                                 ["2026-06", "2026-07", "2026-08"], ("A", "B", "C")) == ["2026-07"]
+    assert ledger.pending_chunks(202, date(2023, 7, 1), "current",
+                                 ["2026-06", "2026-07", "2026-08"], ("A", "B", "C")) == []
+    assert client.connection.execute("SELECT COUNT(*) FROM load_checkpoints").fetchone()[0] == 30
+    event = client.connection.execute("SELECT run_id, stage, status, account_id, detail FROM stages").fetchone()
+    assert event[:4] == ("reset-run", "checkpoint_reset", "SUCCESS", 101)
+    assert json.loads(event[4]) == {"chunk": "2026-07"}
+    assert client.metadata_reads == ["example-project.pmax_ops.load_checkpoints"]
+    reset = next(sql for sql in client.queries if "DELETE FROM" in sql)
+    assert "BEGIN TRANSACTION" in reset and "COMMIT TRANSACTION" in reset
+
+
+def test_checkpoint_reset_rolls_back_if_event_cannot_be_recorded():
+    import duckdb
+    client = CheckpointBQ()
+    ledger = Ledger(client, "example-project", "pmax_ops", now_fn=lambda: NOW)
+    ledger.checkpoint_done(101, "2026-07", "A", "current", "load")
+    client.connection.execute("DROP TABLE stages")
+    with pytest.raises(duckdb.Error, match="stages"):
+        ledger.reset_checkpoint(101, "2026-07", "reset-run")
+    assert client.connection.execute("SELECT COUNT(*) FROM load_checkpoints").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("buffer", [{}, {"estimated_rows": 3}])
+def test_checkpoint_reset_refuses_present_streaming_buffer(buffer):
+    client = CheckpointBQ()
+    client.streaming_buffer = buffer
+    ledger = Ledger(client, "example-project", "pmax_ops", now_fn=lambda: NOW)
+    ledger.checkpoint_done(101, "2026-07", "A", "current", "load")
+    with pytest.raises(RuntimeError, match="streaming buffer") as exc:
+        ledger.reset_checkpoint(101, "2026-07", "reset-run")
+    assert "90 minutes" in str(exc.value) and "re-run" in str(exc.value)
+    assert client.queries == []
+    assert client.connection.execute("SELECT COUNT(*) FROM load_checkpoints").fetchone()[0] == 1
+    assert client.connection.execute("SELECT COUNT(*) FROM stages").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("at_result", [False, True])
+def test_checkpoint_reset_classifies_streaming_buffer_bad_request(monkeypatch, at_result):
+    from google.api_core.exceptions import BadRequest
+    from types import SimpleNamespace
+    client = CheckpointBQ()
+    ledger = Ledger(client, "example-project", "pmax_ops", now_fn=lambda: NOW)
+    ledger.checkpoint_done(101, "2026-07", "A", "current", "load")
+    error = BadRequest("UPDATE or DELETE would affect rows in the streaming buffer")
+    if at_result:
+        def fail_result():
+            raise error
+        monkeypatch.setattr(client, "query", lambda *a, **k: SimpleNamespace(result=fail_result))
+    else:
+        client.query_error = error
+    with pytest.raises(RuntimeError, match="streaming buffer") as exc:
+        ledger.reset_checkpoint(101, "2026-07", "reset-run")
+    assert "90 minutes" in str(exc.value) and "re-run" in str(exc.value)
+    assert client.connection.execute("SELECT COUNT(*) FROM load_checkpoints").fetchone()[0] == 1
+    assert client.connection.execute("SELECT COUNT(*) FROM stages").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("method", ["latest", "unfinished", "snapshot", "pending", "frozen", "reset"])
+def test_every_ledger_query_has_runtime_labels(bq_client, method):
+    from types import SimpleNamespace
+    from pmax_pack.labels import label_value
+    run_id = "Run / With Spaces"
+    ledger = Ledger(bq_client, "example-project", "pmax_ops", env="ci", run_id=run_id)
+    bq_client.tables["example-project.pmax_ops.load_checkpoints"] = SimpleNamespace(streaming_buffer=None)
+    if method == "latest":
+        ledger.latest_run_state(run_id)
+    elif method == "unfinished":
+        ledger.unfinished_runs()
+    elif method == "snapshot":
+        ledger.first_snapshot_date(101)
+    elif method == "pending":
+        ledger.pending_chunks(101, date(2023, 7, 1), "hash", ["2026-07"], ("A",))
+    elif method == "frozen":
+        ledger.frozen_chunks(101, date(2023, 7, 1), ["2026-07"])
+    else:
+        ledger.reset_checkpoint(101, "2026-07", run_id)
+    assert len(bq_client.job_configs) == 1
+    assert bq_client.job_configs[0].labels == {
+        "app": "pmax", "env": "ci", "run_id": label_value(run_id), "stage": "checkpoint",
+    }

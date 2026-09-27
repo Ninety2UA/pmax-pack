@@ -28,21 +28,21 @@ null_keys AS (
   FROM `{{ project }}.{{ marts_dataset }}.mart_cohort_campaign`
   WHERE click_date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
     AND (account_id IS NULL OR campaign_id IS NULL OR metric_basis IS NULL
-      OR cohort_day IS NULL OR provenance IS NULL OR maturity IS NULL)
+      OR cohort_day IS NULL OR provenance IS NULL OR (maturity IS NULL AND provenance != 'unavailable') OR cohort_counting IS NULL)
   UNION ALL
   SELECT COUNT(*)
   FROM `{{ project }}.{{ marts_dataset }}.mart_cohort_asset_group`
   WHERE click_date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
     AND (account_id IS NULL OR campaign_id IS NULL OR asset_group_id IS NULL
       OR metric_basis IS NULL OR cohort_day IS NULL OR provenance IS NULL
-      OR maturity IS NULL)
+      OR (maturity IS NULL AND provenance != 'unavailable') OR cohort_counting IS NULL)
   UNION ALL
   SELECT COUNT(*)
   FROM `{{ project }}.{{ marts_dataset }}.mart_cohort_asset`
   WHERE click_date BETWEEN DATE_SUB(@as_of, INTERVAL {{ window_days }} DAY) AND @as_of
     AND (account_id IS NULL OR campaign_id IS NULL OR asset_group_id IS NULL
       OR asset_id IS NULL OR field_type IS NULL OR metric_basis IS NULL
-      OR cohort_day IS NULL OR provenance IS NULL OR maturity IS NULL)
+      OR cohort_day IS NULL OR provenance IS NULL OR (maturity IS NULL AND provenance != 'unavailable') OR cohort_counting IS NULL)
 ),
 violations AS (
   SELECT row_count FROM duplicate_groups

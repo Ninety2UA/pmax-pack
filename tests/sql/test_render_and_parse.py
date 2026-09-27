@@ -24,6 +24,8 @@ def render_inputs() -> tuple[SimpleNamespace, RunContext]:
         deployment=SimpleNamespace(project="fixture-project"),
         datasets=Datasets(),
         cohort_days=[1, 7, 30],
+        reporting_window_days=90,
+        storage="window",
         tolerances=Tolerances(),
     )
     ctx = RunContext(

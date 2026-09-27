@@ -64,8 +64,8 @@ def test_real_sql_tree_has_valid_dataset_references():
 
 def test_swapped_raw_and_marts_references_fail_with_precise_locations(tmp_path: Path):
     sql_root = _copy_sql_tree(tmp_path)
-    raw_path = sql_root / "stg" / "stg_performance.sql"
-    marts_path = sql_root / "int" / "int_performance.sql"
+    raw_path = sql_root / "stg" / "stg_volume_campaign.sql"
+    marts_path = sql_root / "int" / "int_performance_campaign.sql"
     raw_text = raw_path.read_text(encoding="utf-8")
     marts_text = marts_path.read_text(encoding="utf-8")
     raw_reference = "{{ raw_dataset }}.volume_campaign"
@@ -92,12 +92,12 @@ def test_swapped_raw_and_marts_references_fail_with_precise_locations(tmp_path: 
 
     assert result.returncode == 1
     assert (
-        "stg/stg_performance.sql:"
+        "stg/stg_volume_campaign.sql:"
         f"{next(i for i, line in enumerate(raw_text.splitlines(), 1) if mutated_raw_reference in line)}: "
         "{{ marts_dataset }}.volume_campaign is not a marts table"
     ) in result.stdout
     assert (
-        "int/int_performance.sql:"
+        "int/int_performance_campaign.sql:"
         f"{next(i for i, line in enumerate(marts_text.splitlines(), 1) if mutated_marts_reference in line)}: "
         "{{ raw_dataset }}.stg_volume_campaign is not a raw table"
     ) in result.stdout
@@ -317,3 +317,55 @@ def test_empty_or_missing_sql_root_fails_closed(tmp_path: Path, root_kind: str):
 
     assert result.returncode == 1
     assert f"{sql_root}: no SQL files found" in result.stdout
+
+
+@pytest.mark.parametrize("registration", ["manifest", "sql"])
+@pytest.mark.parametrize("spelling", ["legacy", "attribute"])
+def test_reporting_registry_accepts_registered_tables_and_refuses_others(
+    tmp_path: Path, registration: str, spelling: str,
+) -> None:
+    sql_root = tmp_path / "sql"
+    sql_root.mkdir()
+    manifest = tmp_path / "manifest.yaml"
+    steps = [
+        {"name": "mart_only", "kind": "ddl"},
+        {"name": "performance", "kind": "ddl", "target_dataset": "reporting"},
+    ]
+    create = ""
+    if registration == "sql":
+        steps.pop()
+        create = (
+            "CREATE TABLE IF NOT EXISTS "
+            "`{{ reporting_dataset }}.performance` AS SELECT 1;\n"
+            "CREATE OR REPLACE VIEW `{{ datasets.reporting }}.summary` AS SELECT 1;\n"
+            "SELECT * FROM `{{ reporting_dataset }}.summary`;\n"
+        )
+    manifest.write_text(yaml.safe_dump({"steps": steps}), encoding="utf-8")
+
+    def reference(dataset: str, table: str) -> str:
+        expression = (
+            f"{dataset}_dataset" if spelling == "legacy" else f"datasets.{dataset}"
+        )
+        return f"SELECT * FROM `{{{{ project }}}}.{{{{ {expression} }}}}.{table}`;\n"
+
+    accepted = (
+        create + reference("reporting", "performance")
+        + reference("reporting_verify", "performance")
+    )
+    path = sql_root / "publish.sql"
+    path.write_text(accepted, encoding="utf-8")
+    good = _run_lint(sql_root, manifest)
+    assert good.returncode == 0, good.stdout
+    path.write_text(accepted + (
+        reference("reporting", "unregistered")
+        + reference("reporting_verify", "mart_only")
+        + reference("marts", "performance")
+        + reference("unknown", "performance")
+    ), encoding="utf-8")
+    bad = _run_lint(sql_root, manifest)
+    assert bad.returncode == 1
+    for table, dataset in [
+        ("unregistered", "reporting"), ("mart_only", "reporting_verify"),
+        ("performance", "marts"), ("performance", "unknown"),
+    ]:
+        assert f".{table} is not a {dataset} table" in bad.stdout
