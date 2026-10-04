@@ -254,6 +254,11 @@ phase. Phase 88 records the full set against the published reader account:
 | Audit corroboration | In the recorded probe window, the reader principal's `JobService.InsertJob` entry with status code 7 for each capped SELECT and for the reporting CREATE TABLE, matched by the table or dataset its message names. BigQuery writes no entry for a denied direct read or describe, so those slots are recorded as `NOT_LOGGED_BY_BIGQUERY`. |
 | Looker-side read | Refresh a real chart and record the successful reporting table-read audit entry as a `pmax-looker` principal match with its role, timestamp, and insert ID, never the address. |
 
+On an empty dataset the describe denial proves only that `bigquery.datasets.get`
+is denied, so a custom role that carries `bigquery.tables.getData` without
+`bigquery.datasets.get` goes undetected until the dataset gains a table. Rerun
+the phase 88 probes after an empty dataset gains its first table.
+
 The first five checks prove the configured IAM surface. The last one proves
 the organizational service-agent path used by Looker itself. Record that
 principal in the Go/No-Go as a match with its role, timestamp, and insert ID,

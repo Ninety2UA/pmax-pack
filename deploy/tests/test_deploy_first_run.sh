@@ -430,6 +430,8 @@ esac''')
         log = self.log.read_text()
         self.assertEqual(log.count("builds submit "), 1)
         self.assertIn("--service-account=projects/test-pmax-project/serviceAccounts/build@example.test", log)
+        # Source staging is pinned to the bucket phases 20 and 40 create and grant.
+        self.assertIn("--gcs-source-staging-dir=gs://test-pmax-project_cloudbuild/source", log)
         self.assertNotIn("docker buildx build ", log)
         # The manifest check reads the private registry through Docker, so a
         # fresh operator machine needs the credential helper in cloud mode too.
@@ -570,6 +572,41 @@ esac''')
 unittest.main(argv=[sys.argv[0]], verbosity=2)
 PYBASELINE
 [[ "${PMAX_TEST_BASELINE_DIGEST_ONLY:-0}" != 1 ]] || exit 0
+
+# Cloud Build uploads only what .gcloudignore re-includes after its opening
+# /*, so every Dockerfile COPY source and the Dockerfile must be re-included;
+# a new build input then cannot drop out of the upload unnoticed.
+uv run python - "$ROOT" <<'PYUPLOAD'
+from pathlib import Path
+import re
+import shlex
+import sys
+
+root = Path(sys.argv[1])
+patterns = [line.strip() for line in (root / ".gcloudignore").read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")]
+if not patterns or patterns[0] != "/*":
+    sys.exit("FAIL: .gcloudignore must open its allowlist with /*")
+reincluded = set()
+for pattern in patterns[1:]:
+    if not pattern.startswith("!/"):
+        break
+    reincluded.add(pattern[2:].rstrip("/"))
+inputs = {"Dockerfile", ".dockerignore"}
+dockerfile = re.sub(r"\\\n", " ", (root / "Dockerfile").read_text())
+for line in dockerfile.splitlines():
+    if not line.strip() or line.lstrip().startswith("#"):
+        continue
+    words = shlex.split(line)
+    if words[0].upper() != "COPY" or any(w.startswith("--from") for w in words[1:]):
+        continue
+    sources = [w for w in words[1:] if not w.startswith("--")][:-1]
+    inputs.update(s.removeprefix("./").rstrip("/") for s in sources)
+missing = sorted(inputs - reincluded)
+if missing:
+    sys.exit("FAIL: .gcloudignore allowlist must re-include every build input: " + ", ".join(missing))
+print("PASS: .gcloudignore allowlist re-includes every Dockerfile build input")
+PYUPLOAD
 
 poll_helper="$PHASES/execution-poll.sh"
 [[ -f "$poll_helper" ]] || fail "shared execution poll helper is missing"

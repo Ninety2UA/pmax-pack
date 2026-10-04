@@ -58,6 +58,7 @@ else
   if [[ "$BUILD_MODE" == cloud ]]; then
     run_cmd gcloud builds submit "$ROOT" --project="$PROJECT" --region="$REGION" \
       --config="$ROOT/deploy/cloudbuild.yaml" \
+      --gcs-source-staging-dir="gs://${PROJECT}_cloudbuild/source" \
       --service-account="projects/$PROJECT/serviceAccounts/$BUILD_SA" \
       --substitutions="_IMAGE=$TAGGED_IMAGE" --quiet
   else

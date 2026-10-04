@@ -3242,6 +3242,7 @@ if command == 'bq':
         if leaf == 'ls':
             # Real bq prints an empty body, not '[]', for a dataset with no tables.
             if fault == 'positive_no_table' or (fault == 'no_table' and args[-1] != os.environ['PROJECT'] + ':' + os.environ['DATASET_REPORTING']): pass
+            elif fault == 'one_empty' and args[-1].endswith(':pmax_parity_scratch'): pass
             elif fault == 'malformed_resolution': print('[null]')
             elif fault == 'view_first' and args[-1].endswith(':' + os.environ['DATASET_REPORTING']):
                 page = [{'type': kind, 'tableReference': {'tableId': name}} for kind, name in [('VIEW', 'a_view'), ('SNAPSHOT', 'b_snapshot'), ('TABLE', 'probe_table')]]
@@ -3336,6 +3337,16 @@ if command == 'bq':
         self.assertEqual(result.stdout.count('--update-labels=app=pmax\\,env=verify'), 3)
         self.assertIn('gs://' + self.env['PROJECT'] + '_cloudbuild', result.stdout)
 
+    def test_cloud_build_smokes_built_image_between_build_and_push(self):
+        steps = yaml.safe_load((root / 'deploy/cloudbuild.yaml').read_text())['steps']
+        self.assertEqual([step['args'][0] for step in steps], ['build', 'run', 'push'])
+        build, smoke, push = (step['args'] for step in steps)
+        image = build[build.index('--tag') + 1]
+        self.assertEqual(image, '${_IMAGE}')
+        # The smoke run starts the image just built and prints the CLI help before push.
+        self.assertEqual(smoke[-2:], [image, '--help'])
+        self.assertEqual(push, ['push', image])
+
     def test_looker_iam_bindings(self):
         result = self.run_phase('40-iam.sh', PLAN='1')
         self.assertEqual(result.returncode, 0, result.stdout)
@@ -3357,6 +3368,22 @@ if command == 'bq':
         self.assertEqual(len(conditional), 1)
         self.assertIn('request.time', conditional[0])
         self.assertIn('2099-01-01', conditional[0])
+
+    def test_build_identity_reads_staging_bucket_only(self):
+        result = self.run_phase('40-iam.sh', PLAN='1')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        # Phase 40 derives BUILD_MEMBER from the project, not from the environment.
+        member = '--member=serviceAccount:pmax-build@' + self.env['PROJECT'] + '.iam.gserviceaccount.com'
+        role = '--role=roles/storage.objectViewer'
+        bucket = 'gs://' + self.env['PROJECT'] + '_cloudbuild'
+        lines = result.stdout.splitlines()
+        binding = [x for x in lines if bucket in x and member in x and role in x]
+        self.assertEqual(len(binding), 1, result.stdout)
+        self.assertEqual(re.findall(r'--member=\S+', binding[0]), [member])
+        self.assertEqual(re.findall(r'--role=\S+', binding[0]), [role])
+        # deploy/iam.md: staging bucket only, storage.objectViewer, nothing broader.
+        grants = [x for x in lines if '_cloudbuild' in x and ('--member=' in x or '--role=' in x)]
+        self.assertEqual(grants, binding)
 
     def test_live_iam_does_not_record_editor_or_agent_addresses(self):
         result = self.run_phase('40-iam.sh', ROOT=str(self.work))
@@ -3497,6 +3524,37 @@ if command == 'bq':
         result = self.run_phase('looker-probes.sh', '\nlooker_probes full\n', U18_FAULT='no_table', ROOT=str(self.work))
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assert_probe_targets('synthetic', 'pmax_probe_missing')
+
+    def test_one_empty_denied_dataset_stays_per_dataset(self):
+        result = self.run_phase('looker-probes.sh', '\nlooker_probes full\n', U18_FAULT='one_empty', ROOT=str(self.work))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        project, empty_dataset = self.env['PROJECT'], 'pmax_parity_scratch'
+        denied = set(self.env['DATASETS_CSV'].split(',')) - {self.env['DATASET_REPORTING']}
+        self.assertIn(empty_dataset, denied)
+        populated = denied - {empty_dataset}
+        self.assertTrue(populated)
+        calls = [x['args'] for x in self.calls() if x['command'] == 'bq' and x['impersonated']]
+        reads = [a[-1] for a in calls if 'head' in a or 'query' in a]
+        self.assertEqual([x for x in reads if f':{empty_dataset}.' in x or f'.{empty_dataset}.' in x], [])
+        for dataset in populated:
+            self.assertIn(f'{project}:{dataset}.probe_table', reads)
+            self.assertIn(f'SELECT 1 FROM `{project}.{dataset}.probe_table` LIMIT 1', reads)
+        record = self.probe_record()
+        self.assertEqual(record['status'], 'PASSED')
+        empty = 'NOT_PROVABLE_EMPTY_DATASET'
+        outcomes = {(x['dataset'], x['permission']): x['outcome'] for x in record['probes']}
+        self.assertEqual(outcomes[(empty_dataset, 'tables.getData')], empty)
+        self.assertEqual(outcomes[(empty_dataset, 'tables.getData.query')], empty)
+        self.assertEqual(record['audit_log'][empty_dataset],
+                         {'tables.getData.query': empty, 'tables.getData': empty,
+                          'datasets.get': 'NOT_LOGGED_BY_BIGQUERY'})
+        for dataset in populated:
+            self.assertEqual(outcomes[(dataset, 'tables.getData')], 'PERMISSION_DENIED')
+            self.assertEqual(outcomes[(dataset, 'tables.getData.query')], 'PERMISSION_DENIED')
+            slot = record['audit_log'][dataset]
+            self.assertEqual(slot['tables.getData'], 'NOT_LOGGED_BY_BIGQUERY')
+            self.assertIsNone(slot['tables.getData.query'])
+        self.assertEqual(record['audit_log'][self.env['DATASET_REPORTING']], {'tables.create': None})
 
     def test_every_probe_inversion_and_error_fails(self):
         faults = {

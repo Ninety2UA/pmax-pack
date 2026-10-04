@@ -69,6 +69,8 @@ under [reader credentials](#looker-service-account-credentials-and-probe-window)
 | Deployer | runtime SA | `iam.serviceAccountUser` |
 | Deployer | one secret | `secretmanager.secretVersionAdder` |
 | Deployer | Project custom role | `bigquery.tables.deleteSnapshot` only |
+| Deployer (phase 50, default Cloud Build route) | Project | `cloudbuild.builds.create` (Owner or Editor already has it) |
+| Deployer (phase 50, default Cloud Build route) | `pmax-build` SA | `iam.serviceAccounts.actAs` (Owner or Editor already has it) |
 | Named operator | runtime SA | `iam.serviceAccountTokenCreator` |
 | Named operator | one secret | `secretmanager.secretAccessor` |
 
@@ -272,6 +274,11 @@ the remaining items name their own phase or quota procedure.
    explains the access-denied response's ambiguous existence suffix; the
    [error reference](https://docs.cloud.google.com/bigquery/docs/error-messages)
    distinguishes access denial from Not Found. No probe fixtures are created.
+   What this route cannot prove: on an empty dataset the describe denial
+   proves only that `bigquery.datasets.get` is denied, so a custom role that
+   carries `bigquery.tables.getData` without `bigquery.datasets.get` goes
+   undetected until the dataset gains a table. Rerun the phase 88 probes after
+   an empty dataset gains its first table.
 9. Phase 88 separately submits a `SELECT` on that same name in each denied
    dataset and a `CREATE TABLE` statement in reporting, with
    `--maximum_bytes_billed=1048576`. Each must fail on data access or table
