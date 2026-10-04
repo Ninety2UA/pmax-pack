@@ -3334,7 +3334,7 @@ if command == 'bq':
             self.assertIn('--set_label=env:verify', lines[0])
         # Report, config and the Cloud Build staging bucket carry the pack labels.
         self.assertEqual(result.stdout.count('--update-labels=app=pmax\\,env=verify'), 3)
-        self.assertIn('gs://' + state.get('PROJECT', self.env.get('PROJECT', '')) + '_cloudbuild', result.stdout)
+        self.assertIn('gs://' + self.env['PROJECT'] + '_cloudbuild', result.stdout)
 
     def test_looker_iam_bindings(self):
         result = self.run_phase('40-iam.sh', PLAN='1')
@@ -3452,17 +3452,20 @@ if command == 'bq':
             self.assertEqual(len(selected), len(denied))
         record = self.probe_record(directory)
         self.assertEqual(record['status'], 'PASSED')
+        empty = 'NOT_PROVABLE_EMPTY_DATASET'
         for permission in ('tables.getData', 'datasets.get', 'tables.getData.query'):
             probes = [x for x in record['probes'] if x['permission'] == permission and x['dataset'] in denied]
             self.assertEqual({x['dataset'] for x in probes}, denied)
             for probe in probes:
                 self.assertEqual((probe['route'], probe['table'], probe['resolved_by']), (route, table, 'operator'))
-                expected = 'NOT_PROVABLE_EMPTY_DATASET' if route == 'synthetic' and permission != 'datasets.get' else 'PERMISSION_DENIED'
+                expected = empty if route == 'synthetic' and permission != 'datasets.get' else 'PERMISSION_DENIED'
                 self.assertEqual(probe['outcome'], expected)
         for dataset in denied:
             slot = record['audit_log'][dataset]
-            self.assertIsNone(slot['datasets.get'])
-            self.assertEqual(slot['tables.getData'], 'NOT_PROVABLE_EMPTY_DATASET' if route == 'synthetic' else None)
+            self.assertEqual(slot['datasets.get'], 'NOT_LOGGED_BY_BIGQUERY')
+            self.assertEqual(slot['tables.getData'], empty if route == 'synthetic' else 'NOT_LOGGED_BY_BIGQUERY')
+            self.assertEqual(slot['tables.getData.query'], empty if route == 'synthetic' else None)
+        self.assertEqual(record['audit_log'][reporting], {'tables.create': None})
         self.assertNotIn('ROW_DATA_MUST_NOT_BE_RECORDED', json.dumps(record))
         return record
 
@@ -3541,8 +3544,9 @@ if command == 'bq':
                                                    reporting=dataset, dataset_csv=dataset + ',pmax_raw',
                                                    positive_table=table)
                 self.assertEqual(record['probes'][0]['table'], table)
-                literal = json.dumps(f'projects/{self.env["PROJECT"]}/datasets/{dataset}/tables/{table}', ensure_ascii=False)
-                self.assertIn('protoPayload.resourceName=' + literal, record['audit_log_corroboration']['filter'])
+                # Denials are matched by message, so names never enter the filter.
+                self.assertNotIn('resourceName', record['audit_log_corroboration']['filter'])
+                self.assertNotIn(table, record['audit_log_corroboration']['filter'])
 
     def test_positive_control_skips_non_table_objects(self):
         for mode in ('precheck', 'full'):
@@ -3587,13 +3591,20 @@ if command == 'bq':
                                          '--project=test-pmax-project', '--freshness=30d',
                                          '--order=asc', '--format=json', '--quiet'])
         self.assertEqual(shlex.split(audit['command']), ['env', 'CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=', *audit['argv']])
-        for value in (record['principal'], record['request_reason'], record['started_at'], record['finished_at']):
+        for value in (record['principal'], record['started_at'], record['finished_at']):
             self.assertIn(value, audit['filter'])
+        # BigQuery Data Access entries carry no request reason and no dataset
+        # resource for a denied query (live 2026-10-03).
+        self.assertNotIn('requestAttributes.reason', audit['filter'])
+        self.assertNotIn('resourceName', audit['filter'])
         denied = set(self.env['DATASETS_CSV'].split(',')) - {'pmax_reporting'}
-        self.assertEqual(set(record['audit_log']), denied)
-        for dataset, slot in record['audit_log'].items():
-            self.assertIn('projects/test-pmax-project/datasets/' + dataset, audit['filter'])
-            self.assertEqual(slot, {'tables.getData': None, 'datasets.get': None})
+        self.assertEqual(set(record['audit_log']), denied | {'pmax_reporting'})
+        self.assertEqual(record['audit_log']['pmax_reporting'], {'tables.create': None})
+        for dataset in denied:
+            self.assertEqual(record['audit_log'][dataset], {
+                'tables.getData.query': None,
+                'tables.getData': 'NOT_LOGGED_BY_BIGQUERY',
+                'datasets.get': 'NOT_LOGGED_BY_BIGQUERY'})
         self.assertFalse(any(x['args'][:2] == ['logging', 'read'] for x in self.calls()))
 
     def test_no_job_right_still_reaches_query_probes(self):
@@ -4559,6 +4570,14 @@ if [[ "$(grep -n 'configure-docker' "$ROOT/deploy/phases/50-build-deploy.sh" | h
 fi
 # shellcheck disable=SC2016
 assert_contains "$ROOT/deploy/phases/50-build-deploy.sh" 'configure-docker "$REGION-docker.pkg.dev"'
+
+# Cloud Build uploads the source tree filtered by .gcloudignore, so every path
+# the Docker context keeps off the build (credentials included) stays off it too.
+while IFS= read -r ignore_pattern; do
+  [[ -z "$ignore_pattern" || "$ignore_pattern" == \#* ]] && continue
+  grep -qxF -- "$ignore_pattern" "$ROOT/.gcloudignore" || \
+    fail ".gcloudignore must exclude $ignore_pattern (Cloud Build uploads the source with it)"
+done < "$ROOT/.dockerignore"
 
 for split_suite in lib.sh test_deploy_review.sh test_deploy_first_run.sh; do
   [[ -f "$ROOT/deploy/tests/$split_suite" ]] || \

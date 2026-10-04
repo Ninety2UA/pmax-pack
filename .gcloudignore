@@ -21,3 +21,10 @@ TASKS.md
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+.DS_Store
+.env
+.env.*
+google-ads.yaml
+*.pem
+*.key
+*credentials*.json

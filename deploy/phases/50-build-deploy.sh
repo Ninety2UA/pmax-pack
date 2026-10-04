@@ -51,15 +51,16 @@ else
   BUILD_MODE="${PMAX_BUILD_MODE:-cloud}"
   [[ "$BUILD_MODE" == cloud || "$BUILD_MODE" == local ]] || \
     die "PMAX_BUILD_MODE must be cloud or local"
+  # Docker needs the gcloud credential helper for Artifact Registry before a
+  # local push and before the manifest check in either mode (anonymous token ->
+  # 403, live 2026-08-27). Idempotent local config.
+  run_cmd gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
   if [[ "$BUILD_MODE" == cloud ]]; then
     run_cmd gcloud builds submit "$ROOT" --project="$PROJECT" --region="$REGION" \
       --config="$ROOT/deploy/cloudbuild.yaml" \
       --service-account="projects/$PROJECT/serviceAccounts/$BUILD_SA" \
       --substitutions="_IMAGE=$TAGGED_IMAGE" --quiet
   else
-    # Docker needs the gcloud credential helper for Artifact Registry before
-    # the push (anonymous token -> 403, live 2026-08-27). Idempotent local config.
-    run_cmd gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
     run_cmd docker buildx build --platform linux/amd64 --push \
       --tag "$TAGGED_IMAGE" "$ROOT"
   fi

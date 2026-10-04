@@ -496,7 +496,7 @@ Phase 88 repeats it and records the complete permission matrix:
 |---|---|
 | Reporting direct table read (`tables.getData`) | Successful response containing zero or one row; evidence retains the count and resolved table, never row contents |
 | Dataset listing | Exactly the configured reporting dataset is visible |
-| Every other configured dataset: describe and direct table read | Both return resource PERMISSION_DENIED, with a separate audit-log slot for each denial |
+| Every other configured dataset: describe and direct table read | Both return resource PERMISSION_DENIED; BigQuery writes no audit entry for either, so the probe record is the evidence |
 | Every other configured dataset: capped SELECT | Data access denied; failure to create a query job is insufficient |
 | Reporting: capped CREATE TABLE | Table creation denied; unexpected success stops the phase for operator cleanup |
 
@@ -509,9 +509,12 @@ which route was used. Not Found, a token error, transport failure or quota
 rejection does not prove a resource-access denial. The direct read
 and describe routes exercise different permissions from query-job creation.
 
-Before signing off, run the audit command saved in the phase-88 probe record,
-match principal, resource, method and UTC interval, and fill every denied
-read/describe slot. A successful probe run alone is not corroboration. The
+Before signing off, run the audit command saved in the phase-88 probe record.
+Fill each capped-SELECT slot and the reporting CREATE TABLE slot from the
+matching InsertJob denial: status code 7, with a message naming the table or
+dataset. BigQuery logs no entry for a denied direct read or describe, so those
+slots arrive pre-filled `NOT_LOGGED_BY_BIGQUERY`. A successful probe run alone
+is not corroboration. The
 first successful Looker-side chart read separately proves the organization
 service-agent route. Follow the [IAM probe contract](../deploy/iam.md#mandatory-negative-probes)
 for evidence fields and temporary grant renewal.

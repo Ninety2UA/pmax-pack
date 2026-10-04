@@ -130,8 +130,8 @@ fault = os.environ.get("REHEARSAL_FAULT", "")
 # A bq query with no positional statement reads it from stdin; record that
 # text so tests can inspect statements that travel the stdin route.
 stdin_text = None
-if command == "bq" and args[:1] == ["query"] and not [a for a in args[1:] if not a.startswith("--")] \
-        and not sys.stdin.isatty():
+positional = [a for a in args[1:] if not a.startswith("--")]
+if command == "bq" and args[:1] == ["query"] and not positional and not sys.stdin.isatty():
     stdin_text = sys.stdin.read()
 with open(os.environ["REHEARSAL_LOG"], "a") as stream:
     stream.write(json.dumps({"command": command, "args": args, "stdin": stdin_text,
@@ -217,7 +217,6 @@ if command == "bq":
     # line can never travel as a positional argument (live crash 2026-09-28).
     if any(a.startswith("-- ") or a.startswith("--\n") for a in args[1:]):
         raise SystemExit("FATAL Flags parsing error: Unknown command line flag")
-    positional = [a for a in args[1:] if not a.startswith("--")]
     sql = positional[-1] if positional else (stdin_text or "")
     if "INFORMATION_SCHEMA.TABLE_OPTIONS" in sql:
         import duckdb
@@ -289,7 +288,7 @@ raise SystemExit("unexpected command")
           source "$2"
           printf 'record=%s\\n' "${REHEARSAL_RECORD:-unset}"
         ''', "bash", str(self.functions), str(self.phase)], env={**self.env, **env},
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     def use_recorded_anchor_config_parser(self):
         """Exercise the saved anchor's real fields and defaults when available."""
@@ -319,6 +318,11 @@ raise SystemExit("unexpected command")
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
+
+    @staticmethod
+    def statement(call):
+        """The SQL a bq call ran: its stdin when piped, else the last argument."""
+        return call.get("stdin") or call["args"][-1]
 
     def record(self):
         return self.work / "deployments/test-pmax-project/rehearsal-evidence-sha256-test.json"
@@ -353,7 +357,7 @@ raise SystemExit("unexpected command")
         # Ignored bytecode caches in the anchor checkout must never shadow its verified sources.
         self.assertTrue((rendered[0]["pycache_prefix"] or "").endswith("/rehearsal-anchor-pycache"), rendered[0])
         drop = next(i for i,c in enumerate(calls) if "DROP COLUMN" in " ".join(c["args"]))
-        anchor = [i for i,c in enumerate(calls) if c["command"] == "bq" and "anchor-script:" in (c.get("stdin") or c["args"][-1])]
+        anchor = [i for i,c in enumerate(calls) if c["command"] == "bq" and "anchor-script:" in self.statement(c)]
         add = next(i for i,c in enumerate(calls) if "ADD COLUMN" in " ".join(c["args"]))
         self.assertEqual(len(anchor), 5)
         self.assertLess(drop, min(anchor)); self.assertLess(max(anchor), add)
@@ -364,8 +368,8 @@ raise SystemExit("unexpected command")
         self.assertEqual(json.loads(self.lineage.read_text()), {table: "candidate" for table in COHORT_TABLES})
         for call in calls:
             if call["command"] == "bq":
-                self.assertNotIn("`test-pmax-project.pmax_marts.", call["args"][-1])
-                expected_cap = "10737418240" if "anchor-script:" in (call.get("stdin") or call["args"][-1]) else "10485760"
+                self.assertNotIn("`test-pmax-project.pmax_marts.", self.statement(call))
+                expected_cap = "10737418240" if "anchor-script:" in self.statement(call) else "10485760"
                 self.assertIn("--maximum_bytes_billed=" + expected_cap, call["args"])
                 for label in ("app:pmax", "env:verify", "stage:ladder-88"):
                     self.assertIn("--label=" + label, call["args"])
@@ -385,7 +389,7 @@ raise SystemExit("unexpected command")
                 resets = [i for i, call in enumerate(calls) if call["command"] == "bq" and "DROP TABLE IF EXISTS" in call["args"][-1]]
                 self.assertEqual(len(resets), 1)
                 candidate = next(i for i, call in enumerate(calls) if "--args=rebuild,--as-of,2026-09-18,--target-dataset,pmax_marts_verify" in call["args"])
-                anchor = [i for i, call in enumerate(calls) if call["command"] == "bq" and "anchor-script:" in (call.get("stdin") or call["args"][-1])]
+                anchor = [i for i, call in enumerate(calls) if call["command"] == "bq" and "anchor-script:" in self.statement(call)]
                 self.assertLess(resets[0], candidate)
                 self.assertLess(candidate, min(anchor))
                 targets = ["test-pmax-project.pmax_marts_verify." + table for table in COHORT_TABLES]
@@ -405,9 +409,9 @@ raise SystemExit("unexpected command")
         candidate = next(i for i, call in enumerate(calls) if "--args=rebuild,--as-of,2026-09-18,--target-dataset,pmax_marts_verify" in call["args"])
         for call in calls[candidate + 1:]:
             if call["command"] == "bq":
-                self.assertNotIn("DROP TABLE", call["args"][-1])
-                if "anchor-script:" not in call["args"][-1]:
-                    self.assertNotRegex(call["args"][-1], r"CREATE (?:OR REPLACE )?TABLE")
+                self.assertNotIn("DROP TABLE", self.statement(call))
+                if "anchor-script:" not in self.statement(call):
+                    self.assertNotRegex(self.statement(call), r"CREATE (?:OR REPLACE )?TABLE")
         self.assertEqual(json.loads(self.schema.read_text()), CANDIDATE_COLUMNS)
         self.assertEqual(json.loads(self.lineage.read_text()), {table: "candidate" for table in COHORT_TABLES})
         self.assertNotIn("anchor_schema_prepared", json.loads(self.record().read_text()))

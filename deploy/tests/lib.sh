@@ -179,15 +179,9 @@ case "$*" in
   "scheduler jobs describe "*)
     printf 'PAUSED\n'
     ;;
-  "auth configure-docker "*)
-    exit 0
-    ;;
-  "builds submit "*)
-    # Phase 50's default Cloud Build route; the digest comes from the
-    # artifacts describe leaf below, as for a local build.
-    exit 0
-    ;;
-  "artifacts repositories describe "*)
+  # "builds submit" is phase 50's default Cloud Build route; the digest comes
+  # from the artifacts describe leaf below, as for a local build.
+  "auth configure-docker "*|"builds submit "*|"artifacts repositories describe "*)
     exit 0
     ;;
   "artifacts docker images describe "*)

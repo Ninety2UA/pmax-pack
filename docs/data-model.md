@@ -69,10 +69,13 @@ for the run's snapshot rather than backdating them into historical chunks.
   snapshot use the first snapshot and set `attribute_provenance` to
   `assumed-current`.
 - Per-day `int_entities_*` tables store observed rows and inferred tombstones.
-  Their seen-bound columns stay null. The derived current-value views named
-  `v_int_entities_*` calculate `first_seen_date` and `last_seen_date` across
-  every complete snapshot day, so a prior-day reader sees a later observation
-  immediately and no historical partition stores a stale bound.
+  Their seen-bound columns stay null. Seven internal helper views in
+  `pmax_marts`, the derived current-value views named `v_int_entities_*`,
+  calculate `first_seen_date` and
+  `last_seen_date` across every complete snapshot day. Only the transforms
+  that build the marts read them, so a transform joining an earlier click day
+  sees a later observation immediately and no historical partition stores a
+  stale bound. Looker Studio never reads these views.
 - `observed` means the attribute came from the selected snapshot.
   `inferred-removed` means the entity was present on one complete day and
   absent on the next complete day. `unavailable` means no entity snapshot was
@@ -361,8 +364,8 @@ start and end strings become nullable `DATETIME` through safe parsing.
 
 ## Reporting tables
 
-Dashboards read the eight materialized tables in `pmax_reporting` (or the
-configured reporting dataset). Publication follows successful validation and
+Dashboards read only the eight materialized tables in `pmax_reporting` (or
+the configured reporting dataset); no view sits in the reporting path. Publication follows successful validation and
 replaces all eight tables together in one transaction. A HARD validation
 failure or a failed publish retains the previous reporting generation; the
 marts can already contain newer work. The visible click days run from
@@ -394,8 +397,9 @@ rows written or restated by v2.1.0. Legacy rows may retain NULL. Publication
 keeps the configured ladder and current window rung and excludes cells whose
 `click_day_cost` is NULL.
 
-The internal `v_int_entities_*` views are part of the manifest and supply
-current seen bounds.
+The seven `v_int_entities_*` helper views stay in `pmax_marts`, where the
+transforms that build the marts read them for current seen bounds. They are
+not reporting objects, and the Looker reader has no grant on `pmax_marts`.
 
 ### Looker Studio calculated fields
 

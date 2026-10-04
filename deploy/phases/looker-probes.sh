@@ -269,19 +269,16 @@ denied(query_flags + [sql], "tables.create", reporting, table=create_table)
 if not plan:
     evidence["status"] = "PASSED"
     evidence["finished_at"] = datetime.now(timezone.utc).isoformat()
-    resources = sorted({
-        f"projects/{project}/datasets/{probe['dataset']}"
-        + (f"/tables/{probe['table']}" if probe.get("table") else "")
-        for probe in evidence["probes"]
-    } | {f"projects/{project}/datasets/{d}" for d in datasets})
-    resource_filter = " OR ".join(f"protoPayload.resourceName={json.dumps(r, ensure_ascii=False)}" for r in resources)
+    # BigQuery Data Access entries carry neither the request reason nor, for a
+    # denied query, a dataset resource name (live 2026-10-03): the denial names
+    # the table in protoPayload.status.message on a JobService.InsertJob entry.
+    # The window and principal therefore bound the read; slots are matched by
+    # message.
     log_filter = " AND ".join([
         'protoPayload.serviceName="bigquery.googleapis.com"',
         f"protoPayload.authenticationInfo.principalEmail={json.dumps(principal)}",
-        f"protoPayload.requestMetadata.requestAttributes.reason={json.dumps(request_reason)}",
         f"timestamp>={json.dumps(started_at)}",
         f"timestamp<={json.dumps(evidence['finished_at'])}",
-        "(" + resource_filter + ")",
     ])
     audit_argv = ["gcloud", "logging", "read", log_filter, f"--project={project}",
                   "--freshness=30d", "--order=asc", "--format=json", "--quiet"]
@@ -290,10 +287,13 @@ if not plan:
         "command": shlex.join(["env", "CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=", *audit_argv]),
     }
     synthetic = {dataset for dataset, _table, route in queries if route == "synthetic"}
+    # Denied direct reads and describes left no audit entry (live 2026-10-03).
     evidence["audit_log"] = {
-        d: {"tables.getData": "NOT_PROVABLE_EMPTY_DATASET" if d in synthetic else None,
-            "datasets.get": None}
+        d: {"tables.getData.query": "NOT_PROVABLE_EMPTY_DATASET" if d in synthetic else None,
+            "tables.getData": "NOT_PROVABLE_EMPTY_DATASET" if d in synthetic else "NOT_LOGGED_BY_BIGQUERY",
+            "datasets.get": "NOT_LOGGED_BY_BIGQUERY"}
         for d in datasets if d != reporting}
+    evidence["audit_log"][reporting] = {"tables.create": None}
     save()
     print(f"Looker probe evidence: {record}")
 PY
