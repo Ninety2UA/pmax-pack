@@ -3240,7 +3240,9 @@ if command == 'bq':
     leaf = next((x for x in args if x in ('head', 'ls', 'show', 'query', 'update', 'mk')), '')
     if not impersonated:
         if leaf == 'ls':
-            if fault == 'positive_no_table' or (fault == 'no_table' and args[-1] != os.environ['PROJECT'] + ':' + os.environ['DATASET_REPORTING']): print('[]')
+            # Real bq prints an empty body, not '[]', for a dataset with no tables.
+            if fault == 'positive_no_table' or (fault == 'no_table' and args[-1] != os.environ['PROJECT'] + ':' + os.environ['DATASET_REPORTING']): pass
+            elif fault == 'one_empty' and args[-1].endswith(':pmax_parity_scratch'): pass
             elif fault == 'malformed_resolution': print('[null]')
             elif fault == 'view_first' and args[-1].endswith(':' + os.environ['DATASET_REPORTING']):
                 page = [{'type': kind, 'tableReference': {'tableId': name}} for kind, name in [('VIEW', 'a_view'), ('SNAPSHOT', 'b_snapshot'), ('TABLE', 'probe_table')]]
@@ -3331,7 +3333,19 @@ if command == 'bq':
             lines = [x for x in result.stdout.splitlines() if '--set_label=app:pmax' in x and f':{dataset} ' in x]
             self.assertEqual(len(lines), 1, f'missing dataset label update: {dataset}')
             self.assertIn('--set_label=env:verify', lines[0])
-        self.assertEqual(result.stdout.count('--update-labels=app=pmax\\,env=verify'), 2)
+        # Report, config and the Cloud Build staging bucket carry the pack labels.
+        self.assertEqual(result.stdout.count('--update-labels=app=pmax\\,env=verify'), 3)
+        self.assertIn('gs://' + self.env['PROJECT'] + '_cloudbuild', result.stdout)
+
+    def test_cloud_build_smokes_built_image_between_build_and_push(self):
+        steps = yaml.safe_load((root / 'deploy/cloudbuild.yaml').read_text())['steps']
+        self.assertEqual([step['args'][0] for step in steps], ['build', 'run', 'push'])
+        build, smoke, push = (step['args'] for step in steps)
+        image = build[build.index('--tag') + 1]
+        self.assertEqual(image, '${_IMAGE}')
+        # The smoke run starts the image just built and prints the CLI help before push.
+        self.assertEqual(smoke[-2:], [image, '--help'])
+        self.assertEqual(push, ['push', image])
 
     def test_looker_iam_bindings(self):
         result = self.run_phase('40-iam.sh', PLAN='1')
@@ -3354,6 +3368,22 @@ if command == 'bq':
         self.assertEqual(len(conditional), 1)
         self.assertIn('request.time', conditional[0])
         self.assertIn('2099-01-01', conditional[0])
+
+    def test_build_identity_reads_staging_bucket_only(self):
+        result = self.run_phase('40-iam.sh', PLAN='1')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        # Phase 40 derives BUILD_MEMBER from the project, not from the environment.
+        member = '--member=serviceAccount:pmax-build@' + self.env['PROJECT'] + '.iam.gserviceaccount.com'
+        role = '--role=roles/storage.objectViewer'
+        bucket = 'gs://' + self.env['PROJECT'] + '_cloudbuild'
+        lines = result.stdout.splitlines()
+        binding = [x for x in lines if bucket in x and member in x and role in x]
+        self.assertEqual(len(binding), 1, result.stdout)
+        self.assertEqual(re.findall(r'--member=\S+', binding[0]), [member])
+        self.assertEqual(re.findall(r'--role=\S+', binding[0]), [role])
+        # deploy/iam.md: staging bucket only, storage.objectViewer, nothing broader.
+        grants = [x for x in lines if '_cloudbuild' in x and ('--member=' in x or '--role=' in x)]
+        self.assertEqual(grants, binding)
 
     def test_live_iam_does_not_record_editor_or_agent_addresses(self):
         result = self.run_phase('40-iam.sh', ROOT=str(self.work))
@@ -3425,6 +3455,12 @@ if command == 'bq':
                       [call['args'][-3:] for call in calls if 'head' in call['args']])
         for leaf in ('head', 'show', 'query'):
             selected = [x['args'] for x in calls if leaf in x['args']]
+            if route == 'synthetic' and leaf in ('head', 'query'):
+                # An empty dataset has no provable table read: no head beyond the
+                # positive control and no SELECT probe may be issued.
+                selected = [a for a in selected if a[-1] != positive and not a[-1].startswith('CREATE')]
+                self.assertEqual(selected, [])
+                continue
             if leaf == 'head':
                 selected = [a for a in selected if a[-1] != positive]
                 self.assertEqual({a[-1] for a in selected}, {f"{project}:{d}.{table}" for d in denied})
@@ -3443,11 +3479,20 @@ if command == 'bq':
             self.assertEqual(len(selected), len(denied))
         record = self.probe_record(directory)
         self.assertEqual(record['status'], 'PASSED')
+        empty = 'NOT_PROVABLE_EMPTY_DATASET'
         for permission in ('tables.getData', 'datasets.get', 'tables.getData.query'):
             probes = [x for x in record['probes'] if x['permission'] == permission and x['dataset'] in denied]
             self.assertEqual({x['dataset'] for x in probes}, denied)
             for probe in probes:
                 self.assertEqual((probe['route'], probe['table'], probe['resolved_by']), (route, table, 'operator'))
+                expected = empty if route == 'synthetic' and permission != 'datasets.get' else 'PERMISSION_DENIED'
+                self.assertEqual(probe['outcome'], expected)
+        for dataset in denied:
+            slot = record['audit_log'][dataset]
+            self.assertEqual(slot['datasets.get'], 'NOT_LOGGED_BY_BIGQUERY')
+            self.assertEqual(slot['tables.getData'], empty if route == 'synthetic' else 'NOT_LOGGED_BY_BIGQUERY')
+            self.assertEqual(slot['tables.getData.query'], empty if route == 'synthetic' else None)
+        self.assertEqual(record['audit_log'][reporting], {'tables.create': None})
         self.assertNotIn('ROW_DATA_MUST_NOT_BE_RECORDED', json.dumps(record))
         return record
 
@@ -3479,6 +3524,37 @@ if command == 'bq':
         result = self.run_phase('looker-probes.sh', '\nlooker_probes full\n', U18_FAULT='no_table', ROOT=str(self.work))
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assert_probe_targets('synthetic', 'pmax_probe_missing')
+
+    def test_one_empty_denied_dataset_stays_per_dataset(self):
+        result = self.run_phase('looker-probes.sh', '\nlooker_probes full\n', U18_FAULT='one_empty', ROOT=str(self.work))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        project, empty_dataset = self.env['PROJECT'], 'pmax_parity_scratch'
+        denied = set(self.env['DATASETS_CSV'].split(',')) - {self.env['DATASET_REPORTING']}
+        self.assertIn(empty_dataset, denied)
+        populated = denied - {empty_dataset}
+        self.assertTrue(populated)
+        calls = [x['args'] for x in self.calls() if x['command'] == 'bq' and x['impersonated']]
+        reads = [a[-1] for a in calls if 'head' in a or 'query' in a]
+        self.assertEqual([x for x in reads if f':{empty_dataset}.' in x or f'.{empty_dataset}.' in x], [])
+        for dataset in populated:
+            self.assertIn(f'{project}:{dataset}.probe_table', reads)
+            self.assertIn(f'SELECT 1 FROM `{project}.{dataset}.probe_table` LIMIT 1', reads)
+        record = self.probe_record()
+        self.assertEqual(record['status'], 'PASSED')
+        empty = 'NOT_PROVABLE_EMPTY_DATASET'
+        outcomes = {(x['dataset'], x['permission']): x['outcome'] for x in record['probes']}
+        self.assertEqual(outcomes[(empty_dataset, 'tables.getData')], empty)
+        self.assertEqual(outcomes[(empty_dataset, 'tables.getData.query')], empty)
+        self.assertEqual(record['audit_log'][empty_dataset],
+                         {'tables.getData.query': empty, 'tables.getData': empty,
+                          'datasets.get': 'NOT_LOGGED_BY_BIGQUERY'})
+        for dataset in populated:
+            self.assertEqual(outcomes[(dataset, 'tables.getData')], 'PERMISSION_DENIED')
+            self.assertEqual(outcomes[(dataset, 'tables.getData.query')], 'PERMISSION_DENIED')
+            slot = record['audit_log'][dataset]
+            self.assertEqual(slot['tables.getData'], 'NOT_LOGGED_BY_BIGQUERY')
+            self.assertIsNone(slot['tables.getData.query'])
+        self.assertEqual(record['audit_log'][self.env['DATASET_REPORTING']], {'tables.create': None})
 
     def test_every_probe_inversion_and_error_fails(self):
         faults = {
@@ -3526,8 +3602,9 @@ if command == 'bq':
                                                    reporting=dataset, dataset_csv=dataset + ',pmax_raw',
                                                    positive_table=table)
                 self.assertEqual(record['probes'][0]['table'], table)
-                literal = json.dumps(f'projects/{self.env["PROJECT"]}/datasets/{dataset}/tables/{table}', ensure_ascii=False)
-                self.assertIn('protoPayload.resourceName=' + literal, record['audit_log_corroboration']['filter'])
+                # Denials are matched by message, so names never enter the filter.
+                self.assertNotIn('resourceName', record['audit_log_corroboration']['filter'])
+                self.assertNotIn(table, record['audit_log_corroboration']['filter'])
 
     def test_positive_control_skips_non_table_objects(self):
         for mode in ('precheck', 'full'):
@@ -3572,13 +3649,20 @@ if command == 'bq':
                                          '--project=test-pmax-project', '--freshness=30d',
                                          '--order=asc', '--format=json', '--quiet'])
         self.assertEqual(shlex.split(audit['command']), ['env', 'CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=', *audit['argv']])
-        for value in (record['principal'], record['request_reason'], record['started_at'], record['finished_at']):
+        for value in (record['principal'], record['started_at'], record['finished_at']):
             self.assertIn(value, audit['filter'])
+        # BigQuery Data Access entries carry no request reason and no dataset
+        # resource for a denied query (live 2026-10-03).
+        self.assertNotIn('requestAttributes.reason', audit['filter'])
+        self.assertNotIn('resourceName', audit['filter'])
         denied = set(self.env['DATASETS_CSV'].split(',')) - {'pmax_reporting'}
-        self.assertEqual(set(record['audit_log']), denied)
-        for dataset, slot in record['audit_log'].items():
-            self.assertIn('projects/test-pmax-project/datasets/' + dataset, audit['filter'])
-            self.assertEqual(slot, {'tables.getData': None, 'datasets.get': None})
+        self.assertEqual(set(record['audit_log']), denied | {'pmax_reporting'})
+        self.assertEqual(record['audit_log']['pmax_reporting'], {'tables.create': None})
+        for dataset in denied:
+            self.assertEqual(record['audit_log'][dataset], {
+                'tables.getData.query': None,
+                'tables.getData': 'NOT_LOGGED_BY_BIGQUERY',
+                'datasets.get': 'NOT_LOGGED_BY_BIGQUERY'})
         self.assertFalse(any(x['args'][:2] == ['logging', 'read'] for x in self.calls()))
 
     def test_no_job_right_still_reaches_query_probes(self):
@@ -4159,8 +4243,8 @@ if [[ ! -f "$ROOT/INDEX.md" ]]; then
     fail "INDEX.md is missing from the private tree"
   fi
   echo "SKIP: $ROOT/INDEX.md absent (private file not part of this export)"
-elif ! grep -Eq '^\| RUNBOOK\.md \|.*\| 2026-08-29 \|$' "$ROOT/INDEX.md"; then
-  fail "INDEX.md does not date the RUNBOOK row to 2026-08-29"
+elif ! grep -Eq '^\| RUNBOOK\.md \|.*\| 2026-09-27 \|$' "$ROOT/INDEX.md"; then
+  fail "INDEX.md does not date the RUNBOOK row to 2026-09-27"
 fi
 
 # Private-tree rollback pinning: the generic anchor phrases above hold in
@@ -4544,6 +4628,14 @@ if [[ "$(grep -n 'configure-docker' "$ROOT/deploy/phases/50-build-deploy.sh" | h
 fi
 # shellcheck disable=SC2016
 assert_contains "$ROOT/deploy/phases/50-build-deploy.sh" 'configure-docker "$REGION-docker.pkg.dev"'
+
+# Cloud Build uploads the source tree filtered by .gcloudignore, so every path
+# the Docker context keeps off the build (credentials included) stays off it too.
+while IFS= read -r ignore_pattern; do
+  [[ -z "$ignore_pattern" || "$ignore_pattern" == \#* ]] && continue
+  grep -qxF -- "$ignore_pattern" "$ROOT/.gcloudignore" || \
+    fail ".gcloudignore must exclude $ignore_pattern (Cloud Build uploads the source with it)"
+done < "$ROOT/.dockerignore"
 
 for split_suite in lib.sh test_deploy_review.sh test_deploy_first_run.sh; do
   [[ -f "$ROOT/deploy/tests/$split_suite" ]] || \

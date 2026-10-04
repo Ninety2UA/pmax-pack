@@ -65,9 +65,12 @@ under [reader credentials](#looker-service-account-credentials-and-probe-window)
 | WIF principal set (retained, no workflow bound since v2.0.1) | Project | `bigquery.jobUser` |
 | WIF principal set (retained, no workflow bound since v2.0.1) | CI scratch pair only | `bigquery.dataEditor` |
 | `pmax-build` | Project | `artifactregistry.writer`, `logging.logWriter` |
+| `pmax-build` | Cloud Build staging bucket `<project>_cloudbuild` only | `storage.objectViewer` |
 | Deployer | runtime SA | `iam.serviceAccountUser` |
 | Deployer | one secret | `secretmanager.secretVersionAdder` |
 | Deployer | Project custom role | `bigquery.tables.deleteSnapshot` only |
+| Deployer (phase 50, default Cloud Build route) | Project | `cloudbuild.builds.create` (Owner or Editor already has it) |
+| Deployer (phase 50, default Cloud Build route) | `pmax-build` SA | `iam.serviceAccounts.actAs` (Owner or Editor already has it) |
 | Named operator | runtime SA | `iam.serviceAccountTokenCreator` |
 | Named operator | one secret | `secretmanager.secretAccessor` |
 
@@ -257,15 +260,25 @@ the remaining items name their own phase or quota procedure.
    requires exactly the configured reporting dataset. `datasets.list` names
    the API operation; BigQuery gates dataset visibility with `datasets.get`.
    For every other dataset exported from phase 00's config, the operator
-   resolves one table with `bq ls --max_results=1`. If there is no table, the
-   fixed name `pmax_probe_missing` is used and is never created. As the reader,
-   `bq head --max_rows=1` on that name and `bq show --dataset` on the dataset
-   must return resource access denials. The evidence identifies the existing
-   or synthetic route. A success, 404 / Not Found, token error, or transport
-   error fails the phase. The [query troubleshooting guide](https://docs.cloud.google.com/bigquery/docs/troubleshoot-queries)
+   resolves one table with `bq ls --max_results=1`. As the reader,
+   `bq head --max_rows=1` on that table and `bq show --dataset` on the dataset
+   must return resource access denials. If there is no table, the fixed name
+   `pmax_probe_missing` is recorded, never created, and never read: BigQuery
+   answers Not Found for a table that does not exist to every caller, before
+   any permission check, so a synthetic name cannot prove a denial. On that
+   route the phase records `tables.getData` and `tables.getData.query` as
+   `NOT_PROVABLE_EMPTY_DATASET` and the dataset describe is the provable
+   object. The evidence identifies the existing or synthetic route. A
+   success, 404 / Not Found, token error, or transport error on a probed
+   object fails the phase. The [query troubleshooting guide](https://docs.cloud.google.com/bigquery/docs/troubleshoot-queries)
    explains the access-denied response's ambiguous existence suffix; the
    [error reference](https://docs.cloud.google.com/bigquery/docs/error-messages)
    distinguishes access denial from Not Found. No probe fixtures are created.
+   What this route cannot prove: on an empty dataset the describe denial
+   proves only that `bigquery.datasets.get` is denied, so a custom role that
+   carries `bigquery.tables.getData` without `bigquery.datasets.get` goes
+   undetected until the dataset gains a table. Rerun the phase 88 probes after
+   an empty dataset gains its first table.
 9. Phase 88 separately submits a `SELECT` on that same name in each denied
    dataset and a `CREATE TABLE` statement in reporting, with
    `--maximum_bytes_billed=1048576`. Each must fail on data access or table
@@ -282,8 +295,8 @@ It never records table rows, tokens, editor addresses, or raw command errors.
 A failed attempt has `status: FAILED`; the pre-check creates no record.
 Before the Go/No-Go, the operator runs the exact command stored at
 `audit_log_corroboration.command` after log propagation. It uses `gcloud logging
-read` with an explicit project, reader principal, resource names, request
-reason, and the recorded UTC probe window; phases 75 and 88 never run it.
+read` with an explicit project, the reader principal, and the recorded UTC probe
+window; phases 75 and 88 never run it.
 The command includes `--freshness=30d`, matching the default 30-day Data Access
 log retention assumption. Verify the configured retention and actual coverage
 with the [log-retention readback](../docs/operations.md#log-retention-readback).
@@ -294,23 +307,27 @@ states that `--freshness` works only with descending order and filters without
 a timestamp; the recorded command uses ascending order and explicit timestamps. The explicit 30-day
 value also documents the retention assumption if an operator adjusts that
 query. A bucket's configured retention still determines which logs survive.
-The request reason maps to
-`protoPayload.requestMetadata.requestAttributes.reason` in the
-[AuditLog request attributes](https://docs.cloud.google.com/logging/docs/reference/audit/auditlog/rest/Shared.Types/AuditLog).
-Match resource and method, and fill each denied dataset's `audit_log` slots
-(`tables.getData`, `datasets.get`) with the matching log name, insert ID,
-UTC timestamp, method, and PERMISSION_DENIED status (code 7). Preserve one
-entry for each direct read and describe denial. Keep raw logs private and
-retain no editor, agent, or delegated operator addresses in the attempt.
-If the service omits request attributes, the operator may remove only the
-reason clause for a second read, then explicitly record that limitation and
-match principal, exact resources, methods, and window. Missing entries stay
-pending; a successful probe run alone does not corroborate them.
-Set `audit_log_corroboration.status` to `CORROBORATED` only after all slots
-are filled and independently reviewed. Do not substitute a failed query's missing
-TableDataRead event for this proof. The first successful Looker-side read on
-reporting, with the reader principal in its Data Access log, independently
-proves the service-agent route. See [BigQuery audit logging](https://docs.cloud.google.com/bigquery/docs/reference/auditlogs),
+The filter has no request-reason or resource clause. BigQuery Data Access
+entries do not carry the `bq --request_reason` value, and a denied query's entry
+names its job, not the dataset (observed 2026-10-03). Match each slot by method
+and status message instead:
+
+| Slot | Filled from |
+|---|---|
+| `tables.getData.query` on each denied dataset | The `google.cloud.bigquery.v2.JobService.InsertJob` entry with `protoPayload.status.code` 7 whose message begins `Access Denied: Table <project>:<dataset>.<table>` |
+| `tables.create` on reporting | The InsertJob entry with code 7 whose message begins `Access Denied: Dataset <project>:<reporting>: Permission bigquery.tables.create denied` |
+| `tables.getData` and `datasets.get` | Pre-filled `NOT_LOGGED_BY_BIGQUERY`. BigQuery wrote no Data Access entry for a denied direct read or dataset describe, so the PERMISSION_DENIED results in the probe record are the evidence for these two. |
+| `tables.getData` and `tables.getData.query` on the synthetic route | Pre-filled `NOT_PROVABLE_EMPTY_DATASET`. |
+
+Fill each open slot with the entry's log name, insert ID, UTC timestamp,
+method, and status code. Keep raw logs private and retain no editor, agent, or
+delegated operator addresses in the attempt. Missing entries stay pending; a
+successful probe run alone does not corroborate them. Set
+`audit_log_corroboration.status` to `CORROBORATED` only after every open slot
+is filled and independently reviewed. Do not substitute a failed query's
+missing TableDataRead event for this proof. The first successful Looker-side
+read on reporting, with the reader principal in its Data Access log,
+independently proves the service-agent route. See [BigQuery audit logging](https://docs.cloud.google.com/bigquery/docs/reference/auditlogs),
 [dataset visibility](https://docs.cloud.google.com/bigquery/docs/listing-datasets),
 and [tabledata.list permission](https://docs.cloud.google.com/bigquery/docs/reference/rest/v2/tabledata/list).
 
@@ -446,7 +463,8 @@ retain the harmless execution reference for operator cleanup. See
 For the data boundary, repeat the following direct-table probe for every
 configured dataset, using an existing table resolved during the operator
 inspection above. If a
-dataset is empty, use `pmax_probe_missing` without creating it; only a resource
+dataset is empty, skip the table read (a missing table is Not Found to every
+caller, which proves nothing) and rely on the dataset describe; only a resource
 permission denial counts, never Not Found:
 
 ```bash

@@ -2,12 +2,17 @@
 
 <img src="docs/diagrams/section-overview.png" width="72" height="72" alt="An emerald window over layered data">
 
-![A bounded reporting window emerging from layered Performance Max data](docs/diagrams/readme-hero.png)
+<picture>
+  <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="docs/diagrams/readme-hero-dark-static.png">
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/diagrams/readme-hero-static.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/readme-hero-dark.webp">
+  <img src="docs/diagrams/readme-hero.webp" width="1600" alt="Looping animation of one night: a single Cloud Run Job starts every step in turn. Performance Max rows stream from Google Ads into a new typed-history layer in BigQuery, feed validated marts, pass a validation scan, and one transaction swaps all eight reporting tables to the new generation at once; Looker Studio redraws, the job checks off its run report, and the reporting window moves forward one day.">
+</picture>
 
 An operator-owned Google Ads pipeline for BigQuery, with campaign truth, asset
 diagnostics, cohort CPA and ROAS, and a report explaining what each run could prove.
 
-v2.1.0 publishes eight tables for Looker Studio. They hold the configured
+The pack publishes eight tables for Looker Studio. They hold the configured
 reporting window, fully restated each night, while the operator chooses whether
 older click-day history expires or accumulates. One Cloud Run Job owns
 extraction, validation, publication, and the run ledger.
@@ -22,7 +27,7 @@ extraction, validation, publication, and the run ledger.
 | Connect a report and build its calculated fields | [Looker Studio](docs/looker.md) |
 | Diagnose a run, rebuild history, or respond to an incident | [Operations](docs/operations.md) |
 | Upgrade an existing deployment | [v2.1.0 migration](docs/migrations/v2.1.0.md) |
-| Review permissions or release changes | [IAM](deploy/iam.md) · [Release notes](docs/releases/v2.1.0.md) |
+| Review permissions or release changes | [IAM](deploy/iam.md) · [Release notes](docs/releases/v2.1.1.md) |
 
 ## What you get
 
@@ -38,13 +43,13 @@ the source and build that produced it.
 | History | `window` storage expires old click-day partitions; `incremental` storage retains them and resumes monthly extraction chunks. |
 | Operations | Lease protection, transactional replacements, digest and secret-version pins, run reports, audit evidence, and a deployment ladder (the phased sequence that `deploy/deploy.sh` runs) with an operator review. |
 
-This is an independent runtime. pMaximizer is Google's open-source set of
-Performance Max reporting queries; the pin is the fixed upstream commit that
-the parity tests compare against, recorded in
-[PIN.md](src/pmax_pack/reference/pmaximizer/PIN.md). The pinned pMaximizer
-queries and rules mapping remain attributed and testable through parity; the
-daily marts do not execute Google's upstream chain. The App Reporting Pack (ARP) informs the reporting
-window and asset-day labels but is not a runtime dependency. The exact upstream
+The pack is an independent runtime. pMaximizer is Google's open-source set of
+Performance Max reporting queries. The pack pins one fixed upstream commit,
+recorded in [PIN.md](src/pmax_pack/reference/pmaximizer/PIN.md), and the parity
+tests compare against it. The pinned pMaximizer queries and rules mapping stay
+attributed and testable through parity; the daily marts do not execute Google's
+upstream chain. The App Reporting Pack (ARP) informs the reporting window and
+asset-day labels but is not a runtime dependency. The exact upstream
 mapping and its deliberate omissions are in the [data model](docs/data-model.md#current-fork-transformation-mapping).
 
 ## Architecture
@@ -64,15 +69,15 @@ The datasets have distinct readers and lifetimes:
 |---|---|
 | `pmax_raw` | Landed fact partitions, entity snapshots, and the append-only observation diary. |
 | `pmax_marts` | Staging, typed intermediates, additive marts, entity history, and score marts. |
-| `pmax_reporting` | The eight dashboard tables. The Looker account's only data grant is here. |
+| `pmax_reporting` | The eight dashboard tables. The dedicated read-only Looker service account, `pmax-looker`, has its only data grant here. |
 | `pmax_ops` | Run and stage evidence, assertions, and extraction checkpoints. |
 | `pmax_marts_verify`, `pmax_reporting_verify` | The paired rebuild and migration rehearsal destinations. |
 | Snapshot and parity datasets | Upgrade evidence and isolated comparison work, with their own access boundaries. |
 
-A reporting publication first prepares table schemas, then replaces the eight
-table contents in one transaction. A HARD validation failure prevents that
-publication: marts may contain the attempted generation, while readers retain
-the previous reporting generation. The SQL uses BigQuery's
+A reporting publication first prepares table schemas, then replaces the
+contents of all eight tables in one transaction. A HARD validation failure
+prevents that publication. The marts may then contain the attempted generation,
+while readers keep the previous reporting generation. The SQL uses BigQuery's
 [atomic multi-table transaction support](https://docs.cloud.google.com/bigquery/docs/transactions).
 A dashboard can still show cached results or separate charts queried on opposite
 sides of the commit. Compare both `as_of` and `run_id` after refreshing every
@@ -129,14 +134,14 @@ but does not enlarge the reporting tables.
 | `cohort_asset_group` | Asset-group conversion-lag cohorts. |
 | `cohort_asset` | Asset cohorts from the observation diary. |
 
-Internal `v_int_entities_*` views supply the transform graph. Create CPA,
-ROAS, and CTR from the reporting
-tables using the [tested calculated-field recipes](docs/data-model.md#looker-studio-calculated-fields).
+Looker Studio reads only these eight tables; no views sit in the reporting
+path. Create CPA, ROAS, and CTR from the reporting tables using the
+[tested calculated-field recipes](docs/data-model.md#looker-studio-calculated-fields).
 
 For example, costs of 10 and 90 with conversion counts of 1 and 3 produce
 CPA `(10 + 90) / (1 + 3) = 25`. A zero denominator returns NULL. Select one
 currency, and do not combine NETWORK measures with CONVERSION_ACTION measures.
-Cost is not allocated to individual conversion actions in performance tables.
+Performance tables do not allocate cost to individual conversion actions.
 Asset attribution does not sum to campaign truth; use `campaign_truth` for the
 campaign total.
 
@@ -153,7 +158,7 @@ defines its scope and the limits of goal evidence.
 `cohort_counting` identifies the convention: `google_lag` for campaign and
 asset-group rows, `arp_calendar` for asset rows. The default ladder is
 `[0, 1, 3, 5, 7, 14, 30]`; D0 applies only to assets. The exact day mapping,
-window edge, and worked example have one definition in
+window edge, and worked example are defined once, in
 [the cohort guide](docs/cohorts.md).
 
 An action's click-through window caps its ladder and contributes a final window
@@ -162,9 +167,9 @@ five calendar days. Missing readings remain `unavailable` when that rule cannot 
 them. Calendar age alone never establishes completeness: inspect
 `observed_through`, `maturity`, `provenance`, and `unavailable_reason`.
 
-Filter a cohort chart to one counting convention, rung, and metric basis, or
-keep them as chart dimensions; never aggregate across them.
-Click-day cost repeats across those dimensions. Publication excludes NULL-cost
+Click-day cost repeats across counting conventions, rungs, and metric bases.
+Filter a cohort chart to one of each, or keep them as chart dimensions; never
+aggregate across them. Publication excludes NULL-cost
 cells; the operator report retains the diagnostics explaining those omissions.
 Older incremental rows that have not been restated can retain NULL
 `cohort_counting` and their old labels.
@@ -183,13 +188,13 @@ Older incremental rows that have not been restated can retain NULL
 | Dashboard coverage | Last R full click days. | Last R full click days. |
 | Entity snapshots and observations | Never automatically expired by this rule. | Never automatically expired by this rule. |
 
-The additional day protects the oldest partition during the run. Retention
-follows the partition column, not a table-name prefix: `snapshot_date` and
-`observed_date` are preserved. The reporting and operations datasets never
+The extra day protects the oldest partition during the run. Retention
+follows the partition column, not a table-name prefix, so `snapshot_date` and
+`observed_date` partitions are preserved. The reporting and operations datasets never
 receive the click-day expiration rule.
 
-Switching from incremental to window can remove accumulated history.
-Switching back does not restore deleted data. Parked, unmodified BigQuery
+Switching from incremental to window can remove accumulated history, and
+switching back does not restore deleted data. Parked, unmodified BigQuery
 partitions can qualify for long-term storage pricing after 90 days; reads do
 not reset that timer. Use the region selector on
 [BigQuery pricing](https://cloud.google.com/bigquery/pricing) for the deployment's
@@ -203,8 +208,11 @@ reconstruct what Google reported on a day the pack did not observe.
 ## Deploy and upgrade
 
 Start with [config/example.yaml](config/example.yaml). Deployment requires
-Python 3.12 through `uv`, Google Cloud CLI and `bq`, Docker buildx, an existing
-billed project, and an explicit deployment timezone. The ladder checks the
+Python 3.12 through `uv`, Google Cloud CLI and `bq`, the Docker CLI with buildx,
+an existing billed project, and an explicit deployment timezone. By default, phase 50
+builds the image in Cloud Build and the Docker CLI only inspects the published
+image. The opt-in `PMAX_BUILD_MODE=local` builds locally and needs a local
+Docker engine. The ladder checks the
 project's organization parent, `app=pmax` label, region, and the enforced
 `iam.disableServiceAccountKeyCreation` policy. Keep the Google Ads credential
 file outside the repository.
@@ -225,9 +233,9 @@ editors:
 looker_service_agents: [] # Populate with the service agent from each editor organization.
 ```
 
-This is an excerpt, not a complete deployable config. The [Looker guide](docs/looker.md)
+The excerpt is not a complete deployable config. The [Looker guide](docs/looker.md)
 explains how to obtain the organization-specific agent principals and grant
-editor access before editing a data source. There is no personal-credentials
+editor access before editing a data source. The pack has no personal-credentials
 mode.
 
 Set `REGION` from the validated config as described in the
@@ -255,11 +263,11 @@ Also supply `PMAX_DEPLOYER_MEMBER`, `PMAX_OPERATOR_MEMBER`,
 [Bootstrap inputs](deploy/iam.md#bootstrap-inputs).
 
 `--plan` performs read-only target checks and resolves the ladder generation
-without writing it. `--plan` prints configured principals, including editor
-addresses; never commit it. Keep that output private.
-Never use `--yes`. Human-run phases require the operator's exact
-`PMAX_CONFIRMED_PHASES` entries when invoked without a TTY. Phase 85 may never
-appear in that list. Only the operator authors `PMAX_SIGNED_REVIEW`.
+without writing it. Its output lists configured principals, including editor
+addresses, so keep it private and never commit it.
+Never use `--yes`. Without a TTY, human-run phases require the operator's exact
+`PMAX_CONFIRMED_PHASES` entries, and phase 85 may never appear in that list.
+Only the operator authors `PMAX_SIGNED_REVIEW`.
 
 ![The upgrade separates preparation, candidate evidence, operator review, rehearsal, retention, and resume](docs/diagrams/upgrade-sequence.svg)
 
@@ -273,11 +281,11 @@ appear in that list. Only the operator authors `PMAX_SIGNED_REVIEW`.
 | Signed pass | Supply the candidate digest through `PMAX_IMAGE_REF`, validate the review, rehearse against the twin at 88, apply operator-confirmed retention at 89, prove alerts, and pass the phase-95 observation gate before resuming. |
 
 Follow [the migration procedure](docs/migrations/v2.1.0.md) for retries,
-continuations, required evidence, and rollback. An explicit image pin wins;
-automatic reuse of an unfinished generation requires the same repository HEAD
-within seven days. A rollback returns to the anchor, the recorded prior release
-image and its source checkout; it must clear expiration and restore the anchor's
-schema and config before running its own ladder. The anchor does not publish
+continuations, required evidence, and rollback. An explicit image pin takes
+precedence over automatic reuse of an unfinished generation, which requires the
+same repository HEAD within seven days. A rollback returns to the anchor (the
+recorded prior release image and its source checkout). It must clear expiration
+and restore the anchor's schema and config before running its own ladder. The anchor does not publish
 to `pmax_reporting`, so dashboards remain at the last candidate `as_of`.
 
 ## Cost and runtime budget
@@ -285,9 +293,9 @@ to `pmax_reporting`, so dashboards remain at the last candidate `as_of`.
 Fact loads use one landing load and swap per table, ready transforms run
 concurrently, and report collection is pooled, which keeps submitted jobs and
 idle waits between independent steps low. The deployment's
-first two scheduled reports establish the measured baseline. The first reading
-is expected above the 120-second stage-span target; that target is informational
-and excludes startup and tail work.
+first two scheduled reports establish the measured baseline. Expect the first reading
+to exceed the 120-second stage-span target. That target is informational and
+excludes startup and tail work.
 
 The report separates startup, stage span, tail, and process total, with job
 submissions, rows loaded, and load-path jobs. Process timing begins at CLI entry
@@ -336,8 +344,8 @@ and backfills leave that pointer unchanged.
 | Mixed chart generations | Refresh every source and compare both `as_of` and `run_id` before diagnosing a data reconciliation defect. |
 
 Raw and observation data contains aggregate advertising performance and entity
-configuration, not end-user identifiers. Access, sharing, revocation, and the
-three incident-deletion cases are defined in [operations](docs/operations.md).
+configuration, not end-user identifiers. [Operations](docs/operations.md) defines
+access, sharing, revocation, and the three incident-deletion cases.
 The observation Avro copies have a separate lifetime from report objects.
 
 ## Local verification

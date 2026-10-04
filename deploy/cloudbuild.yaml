@@ -7,6 +7,13 @@ steps:
       - --tag
       - ${_IMAGE}
       - .
+  # Smoke check before publishing: the image must start and print the CLI help.
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - ${_IMAGE}
+      - --help
   - name: gcr.io/cloud-builders/docker
     args:
       - push

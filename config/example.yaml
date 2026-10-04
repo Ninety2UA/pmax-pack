@@ -52,6 +52,8 @@ datasets:
   ci_scratch: pmax_ci_scratch
   ci_scratch_bq: pmax_ci_scratch_bq
   marts_verify: pmax_marts_verify
+  reporting: pmax_reporting
+  reporting_verify: pmax_reporting_verify
 
 buckets:
   report_bucket: your-report-bucket

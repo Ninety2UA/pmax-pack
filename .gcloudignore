@@ -1,3 +1,16 @@
+# Allowlist: Cloud Build uploads only the Dockerfile build inputs (its COPY
+# sources, the Dockerfile, and .dockerignore); no other root-level file uploads,
+# whatever its name. The deny patterns below still filter inside src/ and
+# repeat every .dockerignore line.
+/*
+!/Dockerfile
+!/.dockerignore
+!/pyproject.toml
+!/uv.lock
+!/README.md
+!/LICENSE
+!/NOTICE
+!/src/
 .venv/
 __pycache__/
 *.pyc
@@ -21,3 +34,60 @@ TASKS.md
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+.DS_Store
+.env
+.env.*
+google-ads.yaml
+*.pem
+*.key
+*credentials*.json
+*.p12
+*.pfx
+*.keystore
+*.jks
+*.ppk
+*.enc
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+.netrc
+.pypirc
+.npmrc
+.htpasswd
+client_secret*.json
+*service_account*.json
+*service-account*.json
+token_cache.json
+kaggle.json
+*.env
+*.env.*
+# The same credential names at any depth (Docker matches only the context root otherwise).
+**/.DS_Store
+**/.env
+**/.env.*
+**/google-ads.yaml
+**/*.pem
+**/*.key
+**/*credentials*.json
+**/*.p12
+**/*.pfx
+**/*.keystore
+**/*.jks
+**/*.ppk
+**/*.enc
+**/id_rsa
+**/id_rsa.*
+**/id_ed25519
+**/id_ed25519.*
+**/.netrc
+**/.pypirc
+**/.npmrc
+**/.htpasswd
+**/client_secret*.json
+**/*service_account*.json
+**/*service-account*.json
+**/token_cache.json
+**/kaggle.json
+**/*.env
+**/*.env.*

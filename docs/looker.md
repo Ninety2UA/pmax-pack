@@ -249,10 +249,15 @@ phase. Phase 88 records the full set against the published reader account:
 |---|---|
 | One-row reporting-table read | `tables.getData` succeeds as the reader; zero rows is permitted if the resolved table is empty. |
 | Dataset visibility | Dataset listing returns exactly the configured reporting dataset. |
-| Other dataset metadata and direct reads | Every dataset exported by phase 00 other than reporting rejects both describe and one-row read with access denial. |
-| Query-shaped denials | Table creation in reporting and a SELECT in each other dataset fail on the permission exercised, not on inability to create query jobs. |
-| Audit corroboration | A matching PERMISSION_DENIED Data Access entry for each direct read and dataset-describe denial, with the recorded principal, resource, method, and probe window. |
+| Other dataset metadata and direct reads | Every dataset exported by phase 00 other than reporting rejects describe with access denial, and a dataset with a table also rejects a one-row read of it. An empty dataset has no table to read, so its read slots are recorded as `NOT_PROVABLE_EMPTY_DATASET` and the describe denial is the proof. |
+| Query-shaped denials | Table creation in reporting and a capped SELECT in each other dataset that has a table fail on the permission exercised, not on inability to create query jobs. An empty dataset's SELECT slot is recorded as `NOT_PROVABLE_EMPTY_DATASET`. |
+| Audit corroboration | In the recorded probe window, the reader principal's `JobService.InsertJob` entry with status code 7 for each capped SELECT and for the reporting CREATE TABLE, matched by the table or dataset its message names. BigQuery writes no entry for a denied direct read or describe, so those slots are recorded as `NOT_LOGGED_BY_BIGQUERY`. |
 | Looker-side read | Refresh a real chart and record the successful reporting table-read audit entry as a `pmax-looker` principal match with its role, timestamp, and insert ID, never the address. |
+
+On an empty dataset the describe denial proves only that `bigquery.datasets.get`
+is denied, so a custom role that carries `bigquery.tables.getData` without
+`bigquery.datasets.get` goes undetected until the dataset gains a table. Rerun
+the phase 88 probes after an empty dataset gains its first table.
 
 The first five checks prove the configured IAM surface. The last one proves
 the organizational service-agent path used by Looker itself. Record that

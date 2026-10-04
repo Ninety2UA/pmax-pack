@@ -150,7 +150,10 @@ def resolve_table(dataset: str, *, positive: bool = False) -> tuple[str, str]:
     if response.returncode:
         fail(f"operator table resolution failed for {dataset}")
     try:
-        tables = json.loads(response.stdout)
+        # bq --format=json ls prints nothing at all for an empty dataset
+        # (live refusal 2026-09-30 on the parity scratch dataset); an empty
+        # body is the empty list, not invalid data.
+        tables = json.loads(response.stdout) if response.stdout.strip() else []
         if not isinstance(tables, list) or len(tables) > page_size:
             raise ValueError
         if positive:
@@ -236,8 +239,16 @@ for dataset in datasets:
     if dataset == reporting:
         continue
     table, route = resolve_table(dataset)
-    denied(["head", "--max_rows=1", f"{project}:{dataset}.{table}"],
-           "tables.getData", dataset, table=table, route=route, resolved_by="operator")
+    if route == "synthetic":
+        # BigQuery answers Not Found for a table that does not exist to every
+        # caller, before any permission check (live 2026-09-30), so a synthetic
+        # name can never prove a data denial. The dataset describe below is the
+        # provable object for an empty dataset; record the table slots as such.
+        note("tables.getData", dataset, "NOT_PROVABLE_EMPTY_DATASET",
+             table=table, route=route, resolved_by="operator")
+    else:
+        denied(["head", "--max_rows=1", f"{project}:{dataset}.{table}"],
+               "tables.getData", dataset, table=table, route=route, resolved_by="operator")
     denied(["show", "--dataset", f"{project}:{dataset}"], "datasets.get", dataset,
            table=table, route=route, resolved_by="operator")
     queries.append((dataset, table, route))
@@ -245,6 +256,10 @@ for dataset in datasets:
 # Exercise query-shaped permissions separately from the metadata and row APIs.
 query_flags = ["query", "--use_legacy_sql=false", "--maximum_bytes_billed=1048576"]
 for dataset, table, route in queries:
+    if route == "synthetic":
+        note("tables.getData.query", dataset, "NOT_PROVABLE_EMPTY_DATASET",
+             table=table, route=route, resolved_by="operator")
+        continue
     sql = f"SELECT 1 FROM {sql_name(dataset, table)} LIMIT 1"
     denied(query_flags + [sql], "tables.getData.query", dataset, table=table, route=route, resolved_by="operator")
 create_table = "pmax_probe_forbidden_" + request_reason.rsplit("-", 1)[1]
@@ -254,19 +269,16 @@ denied(query_flags + [sql], "tables.create", reporting, table=create_table)
 if not plan:
     evidence["status"] = "PASSED"
     evidence["finished_at"] = datetime.now(timezone.utc).isoformat()
-    resources = sorted({
-        f"projects/{project}/datasets/{probe['dataset']}"
-        + (f"/tables/{probe['table']}" if probe.get("table") else "")
-        for probe in evidence["probes"]
-    } | {f"projects/{project}/datasets/{d}" for d in datasets})
-    resource_filter = " OR ".join(f"protoPayload.resourceName={json.dumps(r, ensure_ascii=False)}" for r in resources)
+    # BigQuery Data Access entries carry neither the request reason nor, for a
+    # denied query, a dataset resource name (live 2026-10-03): the denial names
+    # the table in protoPayload.status.message on a JobService.InsertJob entry.
+    # The window and principal therefore bound the read; slots are matched by
+    # message.
     log_filter = " AND ".join([
         'protoPayload.serviceName="bigquery.googleapis.com"',
         f"protoPayload.authenticationInfo.principalEmail={json.dumps(principal)}",
-        f"protoPayload.requestMetadata.requestAttributes.reason={json.dumps(request_reason)}",
         f"timestamp>={json.dumps(started_at)}",
         f"timestamp<={json.dumps(evidence['finished_at'])}",
-        "(" + resource_filter + ")",
     ])
     audit_argv = ["gcloud", "logging", "read", log_filter, f"--project={project}",
                   "--freshness=30d", "--order=asc", "--format=json", "--quiet"]
@@ -274,8 +286,14 @@ if not plan:
         "status": "OPERATOR_PENDING", "filter": log_filter, "argv": audit_argv,
         "command": shlex.join(["env", "CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=", *audit_argv]),
     }
-    evidence["audit_log"] = {d: {"tables.getData": None, "datasets.get": None}
-                             for d in datasets if d != reporting}
+    synthetic = {dataset for dataset, _table, route in queries if route == "synthetic"}
+    # Denied direct reads and describes left no audit entry (live 2026-10-03).
+    evidence["audit_log"] = {
+        d: {"tables.getData.query": "NOT_PROVABLE_EMPTY_DATASET" if d in synthetic else None,
+            "tables.getData": "NOT_PROVABLE_EMPTY_DATASET" if d in synthetic else "NOT_LOGGED_BY_BIGQUERY",
+            "datasets.get": "NOT_LOGGED_BY_BIGQUERY"}
+        for d in datasets if d != reporting}
+    evidence["audit_log"][reporting] = {"tables.create": None}
     save()
     print(f"Looker probe evidence: {record}")
 PY

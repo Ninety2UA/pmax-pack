@@ -320,8 +320,10 @@ esac''')
         self.assertIn("--image=" + image_base + "@sha256:explicit", self.log.read_text())
         self.log.write_text("")
         self.successful(self.run_phases("25-dry-run.sh", "50-build-deploy.sh", PMAX_FORCE_BUILD="1", FAKE_BUILD_DIGEST="forced"))
-        self.assertEqual(self.log.read_text().count("docker buildx build "), 1)
-        self.assertIn("--image=" + image_base + "@sha256:forced", self.log.read_text())
+        log = self.log.read_text()
+        self.assertEqual(log.count("builds submit "), 1)
+        self.assertNotIn("docker buildx build ", log)
+        self.assertIn("--image=" + image_base + "@sha256:forced", log)
         self.assertTrue(prior.exists())
         self.assertTrue(self.baseline("forced").exists())
 
@@ -420,8 +422,33 @@ esac''')
                                        extra="record_resume_completion"))
         self.log.write_text("")
         self.successful(self.run_phases("25-dry-run.sh", "50-build-deploy.sh", FAKE_BUILD_DIGEST="next"))
-        self.assertEqual(self.log.read_text().count("docker buildx build "), 1)
+        self.assertEqual(self.log.read_text().count("builds submit "), 1)
         self.assertIn("--image=" + image_base + "@sha256:next", self.log.read_text())
+
+    def test_build_mode_cloud_by_default_local_on_request(self):
+        self.successful(self.run_phases("25-dry-run.sh", "50-build-deploy.sh", FAKE_BUILD_DIGEST="cloud"))
+        log = self.log.read_text()
+        self.assertEqual(log.count("builds submit "), 1)
+        self.assertIn("--service-account=projects/test-pmax-project/serviceAccounts/build@example.test", log)
+        # Source staging is pinned to the bucket phases 20 and 40 create and grant.
+        self.assertIn("--gcs-source-staging-dir=gs://test-pmax-project_cloudbuild/source", log)
+        self.assertNotIn("docker buildx build ", log)
+        # The manifest check reads the private registry through Docker, so a
+        # fresh operator machine needs the credential helper in cloud mode too.
+        self.assertIn("docker buildx imagetools inspect ", log)
+        self.assertIn("auth configure-docker europe-west1-docker.pkg.dev", log)
+        self.assertLess(log.index("auth configure-docker "), log.index("docker buildx imagetools inspect "))
+        self.log.write_text("")
+        self.successful(self.run_phases("25-dry-run.sh", "50-build-deploy.sh", PMAX_FORCE_BUILD="1",
+                                        PMAX_BUILD_MODE="local", FAKE_BUILD_DIGEST="local"))
+        log = self.log.read_text()
+        self.assertEqual(log.count("docker buildx build "), 1)
+        self.assertNotIn("builds submit ", log)
+        self.log.write_text("")
+        result = self.run_phases("25-dry-run.sh", "50-build-deploy.sh", PMAX_FORCE_BUILD="1",
+                                 PMAX_BUILD_MODE="laptop")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("PMAX_BUILD_MODE must be cloud or local", result.stdout + result.stderr)
 
     def test_active_regular_file_can_change_without_mutating_first_baseline(self):
         self.successful(self.run_phases("25-dry-run.sh", "50-build-deploy.sh"))
@@ -545,6 +572,41 @@ esac''')
 unittest.main(argv=[sys.argv[0]], verbosity=2)
 PYBASELINE
 [[ "${PMAX_TEST_BASELINE_DIGEST_ONLY:-0}" != 1 ]] || exit 0
+
+# Cloud Build uploads only what .gcloudignore re-includes after its opening
+# /*, so every Dockerfile COPY source and the Dockerfile must be re-included;
+# a new build input then cannot drop out of the upload unnoticed.
+uv run python - "$ROOT" <<'PYUPLOAD'
+from pathlib import Path
+import re
+import shlex
+import sys
+
+root = Path(sys.argv[1])
+patterns = [line.strip() for line in (root / ".gcloudignore").read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")]
+if not patterns or patterns[0] != "/*":
+    sys.exit("FAIL: .gcloudignore must open its allowlist with /*")
+reincluded = set()
+for pattern in patterns[1:]:
+    if not pattern.startswith("!/"):
+        break
+    reincluded.add(pattern[2:].rstrip("/"))
+inputs = {"Dockerfile", ".dockerignore"}
+dockerfile = re.sub(r"\\\n", " ", (root / "Dockerfile").read_text())
+for line in dockerfile.splitlines():
+    if not line.strip() or line.lstrip().startswith("#"):
+        continue
+    words = shlex.split(line)
+    if words[0].upper() != "COPY" or any(w.startswith("--from") for w in words[1:]):
+        continue
+    sources = [w for w in words[1:] if not w.startswith("--")][:-1]
+    inputs.update(s.removeprefix("./").rstrip("/") for s in sources)
+missing = sorted(inputs - reincluded)
+if missing:
+    sys.exit("FAIL: .gcloudignore allowlist must re-include every build input: " + ", ".join(missing))
+print("PASS: .gcloudignore allowlist re-includes every Dockerfile build input")
+PYUPLOAD
 
 poll_helper="$PHASES/execution-poll.sh"
 [[ -f "$poll_helper" ]] || fail "shared execution poll helper is missing"
