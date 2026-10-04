@@ -203,7 +203,7 @@ reconstruct what Google reported on a day the pack did not observe.
 ## Deploy and upgrade
 
 Start with [config/example.yaml](config/example.yaml). Deployment requires
-Python 3.12 through `uv`, Google Cloud CLI and `bq`, Docker buildx, an existing
+Python 3.12 through `uv`, Google Cloud CLI and `bq`, the Docker CLI with buildx (image inspection only; builds run in Cloud Build unless `PMAX_BUILD_MODE=local`), an existing
 billed project, and an explicit deployment timezone. The ladder checks the
 project's organization parent, `app=pmax` label, region, and the enforced
 `iam.disableServiceAccountKeyCreation` policy. Keep the Google Ads credential

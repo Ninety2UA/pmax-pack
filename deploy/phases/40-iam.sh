@@ -202,6 +202,11 @@ iam_cmd gcloud storage buckets add-iam-policy-binding "gs://$REPORT_BUCKET" \
 iam_cmd gcloud storage buckets add-iam-policy-binding "gs://$CONFIG_BUCKET" \
   --project="$PROJECT" --member="$RUNTIME_MEMBER" \
   --role=roles/storage.objectViewer --condition=None --quiet
+# Phase 50 builds in Cloud Build as the dedicated build identity, which reads the
+# uploaded source from the project's staging bucket and nothing else.
+iam_cmd gcloud storage buckets add-iam-policy-binding "gs://${PROJECT}_cloudbuild" \
+  --project="$PROJECT" --member="$BUILD_MEMBER" \
+  --role=roles/storage.objectViewer --condition=None --quiet
 
 iam_cmd gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
   --project="$PROJECT" --member="$DEPLOYER_MEMBER" \

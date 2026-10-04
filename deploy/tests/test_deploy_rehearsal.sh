@@ -127,8 +127,14 @@ from pathlib import Path
 args = sys.argv[1:]
 command = Path(sys.argv[0]).name
 fault = os.environ.get("REHEARSAL_FAULT", "")
+# A bq query with no positional statement reads it from stdin; record that
+# text so tests can inspect statements that travel the stdin route.
+stdin_text = None
+if command == "bq" and args[:1] == ["query"] and not [a for a in args[1:] if not a.startswith("--")] \
+        and not sys.stdin.isatty():
+    stdin_text = sys.stdin.read()
 with open(os.environ["REHEARSAL_LOG"], "a") as stream:
-    stream.write(json.dumps({"command": command, "args": args,
+    stream.write(json.dumps({"command": command, "args": args, "stdin": stdin_text,
         "config": os.environ.get("PMAX_CONFIG"),
         "impersonation": os.environ.get("CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT"),
         "pycache_prefix": os.environ.get("PYTHONPYCACHEPREFIX")}) + "\n")
@@ -206,7 +212,13 @@ if command == "gcloud":
     raise SystemExit("unsupported gcloud leaf")
 if command == "bq":
     if not args or args[0] != "query": raise SystemExit("unsupported bq leaf")
-    sql = args[-1]
+    # Real bq (absl flags) treats any argument that starts with "--" as a flag
+    # and crashes on an unknown one, so a SQL text that opens with a comment
+    # line can never travel as a positional argument (live crash 2026-09-28).
+    if any(a.startswith("-- ") or a.startswith("--\n") for a in args[1:]):
+        raise SystemExit("FATAL Flags parsing error: Unknown command line flag")
+    positional = [a for a in args[1:] if not a.startswith("--")]
+    sql = positional[-1] if positional else (stdin_text or "")
     if "INFORMATION_SCHEMA.TABLE_OPTIONS" in sql:
         import duckdb
         con = duckdb.connect()
@@ -341,7 +353,7 @@ raise SystemExit("unexpected command")
         # Ignored bytecode caches in the anchor checkout must never shadow its verified sources.
         self.assertTrue((rendered[0]["pycache_prefix"] or "").endswith("/rehearsal-anchor-pycache"), rendered[0])
         drop = next(i for i,c in enumerate(calls) if "DROP COLUMN" in " ".join(c["args"]))
-        anchor = [i for i,c in enumerate(calls) if c["command"] == "bq" and "anchor-script:" in c["args"][-1]]
+        anchor = [i for i,c in enumerate(calls) if c["command"] == "bq" and "anchor-script:" in (c.get("stdin") or c["args"][-1])]
         add = next(i for i,c in enumerate(calls) if "ADD COLUMN" in " ".join(c["args"]))
         self.assertEqual(len(anchor), 5)
         self.assertLess(drop, min(anchor)); self.assertLess(max(anchor), add)
@@ -353,7 +365,7 @@ raise SystemExit("unexpected command")
         for call in calls:
             if call["command"] == "bq":
                 self.assertNotIn("`test-pmax-project.pmax_marts.", call["args"][-1])
-                expected_cap = "10737418240" if "anchor-script:" in call["args"][-1] else "10485760"
+                expected_cap = "10737418240" if "anchor-script:" in (call.get("stdin") or call["args"][-1]) else "10485760"
                 self.assertIn("--maximum_bytes_billed=" + expected_cap, call["args"])
                 for label in ("app:pmax", "env:verify", "stage:ladder-88"):
                     self.assertIn("--label=" + label, call["args"])
@@ -373,7 +385,7 @@ raise SystemExit("unexpected command")
                 resets = [i for i, call in enumerate(calls) if call["command"] == "bq" and "DROP TABLE IF EXISTS" in call["args"][-1]]
                 self.assertEqual(len(resets), 1)
                 candidate = next(i for i, call in enumerate(calls) if "--args=rebuild,--as-of,2026-09-18,--target-dataset,pmax_marts_verify" in call["args"])
-                anchor = [i for i, call in enumerate(calls) if call["command"] == "bq" and "anchor-script:" in call["args"][-1]]
+                anchor = [i for i, call in enumerate(calls) if call["command"] == "bq" and "anchor-script:" in (call.get("stdin") or call["args"][-1])]
                 self.assertLess(resets[0], candidate)
                 self.assertLess(candidate, min(anchor))
                 targets = ["test-pmax-project.pmax_marts_verify." + table for table in COHORT_TABLES]
@@ -635,6 +647,17 @@ raise SystemExit("unexpected command")
         self.assertNotIn("anchor_source_commit", data)
         self.assertFalse(any("DROP COLUMN" in " ".join(c["args"]) for c in self.calls()))
         self.assertFalse(any(c["command"] == "git" for c in self.calls()))
+
+    def test_anchor_scripts_travel_through_stdin(self):
+        result = self.run_phase()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        anchor_calls = [c for c in self.calls() if c["command"] == "bq" and "--label=stage:ladder-88" in c["args"]
+                        and "--parameter=as_of:DATE:2026-09-18" in c["args"]]
+        self.assertEqual(len(anchor_calls), 5)
+        for call in anchor_calls:
+            self.assertFalse([a for a in call["args"][1:] if not a.startswith("--")],
+                             "anchor SQL must not be a positional bq argument")
+        self.assertIs(json.loads(self.record().read_text())["anchor_scripts_passed"], True)
 
     def test_first_deploy_second_pass_needs_no_anchor(self):
         result = self.run_phase(UPGRADE="1", ANCHOR_REHEARSAL_REQUIRED="0",

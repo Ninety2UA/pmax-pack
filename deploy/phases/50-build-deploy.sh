@@ -46,7 +46,12 @@ if [[ -n "$REQUESTED_IMAGE_REF" ]]; then
       die "PMAX_IMAGE_REF digest did not resolve to the requested image"
   fi
 else
-  if [[ "${PMAX_BUILD_MODE:-local}" == cloud ]]; then
+  # Cloud Build is the default (no Docker VM on the operator machine, as in the
+  # ARP); PMAX_BUILD_MODE=local builds with a local Docker engine instead.
+  BUILD_MODE="${PMAX_BUILD_MODE:-cloud}"
+  [[ "$BUILD_MODE" == cloud || "$BUILD_MODE" == local ]] || \
+    die "PMAX_BUILD_MODE must be cloud or local"
+  if [[ "$BUILD_MODE" == cloud ]]; then
     run_cmd gcloud builds submit "$ROOT" --project="$PROJECT" --region="$REGION" \
       --config="$ROOT/deploy/cloudbuild.yaml" \
       --service-account="projects/$PROJECT/serviceAccounts/$BUILD_SA" \

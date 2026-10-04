@@ -65,6 +65,7 @@ under [reader credentials](#looker-service-account-credentials-and-probe-window)
 | WIF principal set (retained, no workflow bound since v2.0.1) | Project | `bigquery.jobUser` |
 | WIF principal set (retained, no workflow bound since v2.0.1) | CI scratch pair only | `bigquery.dataEditor` |
 | `pmax-build` | Project | `artifactregistry.writer`, `logging.logWriter` |
+| `pmax-build` | Cloud Build staging bucket `<project>_cloudbuild` only | `storage.objectViewer` |
 | Deployer | runtime SA | `iam.serviceAccountUser` |
 | Deployer | one secret | `secretmanager.secretVersionAdder` |
 | Deployer | Project custom role | `bigquery.tables.deleteSnapshot` only |
@@ -257,12 +258,17 @@ the remaining items name their own phase or quota procedure.
    requires exactly the configured reporting dataset. `datasets.list` names
    the API operation; BigQuery gates dataset visibility with `datasets.get`.
    For every other dataset exported from phase 00's config, the operator
-   resolves one table with `bq ls --max_results=1`. If there is no table, the
-   fixed name `pmax_probe_missing` is used and is never created. As the reader,
-   `bq head --max_rows=1` on that name and `bq show --dataset` on the dataset
-   must return resource access denials. The evidence identifies the existing
-   or synthetic route. A success, 404 / Not Found, token error, or transport
-   error fails the phase. The [query troubleshooting guide](https://docs.cloud.google.com/bigquery/docs/troubleshoot-queries)
+   resolves one table with `bq ls --max_results=1`. As the reader,
+   `bq head --max_rows=1` on that table and `bq show --dataset` on the dataset
+   must return resource access denials. If there is no table, the fixed name
+   `pmax_probe_missing` is recorded, never created, and never read: BigQuery
+   answers Not Found for a table that does not exist to every caller, before
+   any permission check, so a synthetic name cannot prove a denial. On that
+   route the phase records `tables.getData` and `tables.getData.query` as
+   `NOT_PROVABLE_EMPTY_DATASET` and the dataset describe is the provable
+   object. The evidence identifies the existing or synthetic route. A
+   success, 404 / Not Found, token error, or transport error on a probed
+   object fails the phase. The [query troubleshooting guide](https://docs.cloud.google.com/bigquery/docs/troubleshoot-queries)
    explains the access-denied response's ambiguous existence suffix; the
    [error reference](https://docs.cloud.google.com/bigquery/docs/error-messages)
    distinguishes access denial from Not Found. No probe fixtures are created.
@@ -446,7 +452,8 @@ retain the harmless execution reference for operator cleanup. See
 For the data boundary, repeat the following direct-table probe for every
 configured dataset, using an existing table resolved during the operator
 inspection above. If a
-dataset is empty, use `pmax_probe_missing` without creating it; only a resource
+dataset is empty, skip the table read (a missing table is Not Found to every
+caller, which proves nothing) and rely on the dataset describe; only a resource
 permission denial counts, never Not Found:
 
 ```bash

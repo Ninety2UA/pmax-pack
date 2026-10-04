@@ -150,7 +150,10 @@ def resolve_table(dataset: str, *, positive: bool = False) -> tuple[str, str]:
     if response.returncode:
         fail(f"operator table resolution failed for {dataset}")
     try:
-        tables = json.loads(response.stdout)
+        # bq --format=json ls prints nothing at all for an empty dataset
+        # (live refusal 2026-09-30 on the parity scratch dataset); an empty
+        # body is the empty list, not invalid data.
+        tables = json.loads(response.stdout) if response.stdout.strip() else []
         if not isinstance(tables, list) or len(tables) > page_size:
             raise ValueError
         if positive:
@@ -236,8 +239,16 @@ for dataset in datasets:
     if dataset == reporting:
         continue
     table, route = resolve_table(dataset)
-    denied(["head", "--max_rows=1", f"{project}:{dataset}.{table}"],
-           "tables.getData", dataset, table=table, route=route, resolved_by="operator")
+    if route == "synthetic":
+        # BigQuery answers Not Found for a table that does not exist to every
+        # caller, before any permission check (live 2026-09-30), so a synthetic
+        # name can never prove a data denial. The dataset describe below is the
+        # provable object for an empty dataset; record the table slots as such.
+        note("tables.getData", dataset, "NOT_PROVABLE_EMPTY_DATASET",
+             table=table, route=route, resolved_by="operator")
+    else:
+        denied(["head", "--max_rows=1", f"{project}:{dataset}.{table}"],
+               "tables.getData", dataset, table=table, route=route, resolved_by="operator")
     denied(["show", "--dataset", f"{project}:{dataset}"], "datasets.get", dataset,
            table=table, route=route, resolved_by="operator")
     queries.append((dataset, table, route))
@@ -245,6 +256,10 @@ for dataset in datasets:
 # Exercise query-shaped permissions separately from the metadata and row APIs.
 query_flags = ["query", "--use_legacy_sql=false", "--maximum_bytes_billed=1048576"]
 for dataset, table, route in queries:
+    if route == "synthetic":
+        note("tables.getData.query", dataset, "NOT_PROVABLE_EMPTY_DATASET",
+             table=table, route=route, resolved_by="operator")
+        continue
     sql = f"SELECT 1 FROM {sql_name(dataset, table)} LIMIT 1"
     denied(query_flags + [sql], "tables.getData.query", dataset, table=table, route=route, resolved_by="operator")
 create_table = "pmax_probe_forbidden_" + request_reason.rsplit("-", 1)[1]
@@ -274,8 +289,11 @@ if not plan:
         "status": "OPERATOR_PENDING", "filter": log_filter, "argv": audit_argv,
         "command": shlex.join(["env", "CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=", *audit_argv]),
     }
-    evidence["audit_log"] = {d: {"tables.getData": None, "datasets.get": None}
-                             for d in datasets if d != reporting}
+    synthetic = {dataset for dataset, _table, route in queries if route == "synthetic"}
+    evidence["audit_log"] = {
+        d: {"tables.getData": "NOT_PROVABLE_EMPTY_DATASET" if d in synthetic else None,
+            "datasets.get": None}
+        for d in datasets if d != reporting}
     save()
     print(f"Looker probe evidence: {record}")
 PY

@@ -500,10 +500,13 @@ Phase 88 repeats it and records the complete permission matrix:
 | Every other configured dataset: capped SELECT | Data access denied; failure to create a query job is insufficient |
 | Reporting: capped CREATE TABLE | Table creation denied; unexpected success stops the phase for operator cleanup |
 
-The operator resolves a table in each denied dataset. When none exists, probes
-use the synthetic name `pmax_probe_missing` without creating it. The record
-identifies which route was used. Not Found, a token error, transport failure
-or quota rejection does not prove a resource-access denial. The direct read
+The operator resolves a table in each denied dataset. When none exists, the
+record carries the synthetic name `pmax_probe_missing`, never created and never
+read, and marks the table read and capped SELECT `NOT_PROVABLE_EMPTY_DATASET`;
+the dataset describe denial is the proof for an empty dataset, because BigQuery
+reports a missing table as Not Found to every caller. The record identifies
+which route was used. Not Found, a token error, transport failure or quota
+rejection does not prove a resource-access denial. The direct read
 and describe routes exercise different permissions from query-job creation.
 
 Before signing off, run the audit command saved in the phase-88 probe record,

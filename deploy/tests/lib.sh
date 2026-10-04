@@ -182,6 +182,11 @@ case "$*" in
   "auth configure-docker "*)
     exit 0
     ;;
+  "builds submit "*)
+    # Phase 50's default Cloud Build route; the digest comes from the
+    # artifacts describe leaf below, as for a local build.
+    exit 0
+    ;;
   "artifacts repositories describe "*)
     exit 0
     ;;

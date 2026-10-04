@@ -338,10 +338,13 @@ PY_ANCHOR
     build_mart_cohort_asset_group build_mart_cohort_asset; do
     if [[ "$PLAN" -eq 1 ]]; then
       print_command "${BQ_ANCHOR[@]}" --parameter=as_of:DATE:"$RUN_DAY" \
-        --parameter=run_id::"$REHEARSAL_RUN_ID" "<rendered anchor $step SQL against $DATASET_VERIFY>"
+        --parameter=run_id::"$REHEARSAL_RUN_ID" "< rendered anchor $step SQL against $DATASET_VERIFY (stdin)"
     else
+      # The rendered anchor SQL opens with a comment line, and bq parses a
+      # positional argument that starts with "--" as an unknown flag (live
+      # crash 2026-09-28). Feed the statement through stdin instead.
       "${BQ_ANCHOR[@]}" --parameter=as_of:DATE:"$RUN_DAY" \
-        --parameter=run_id::"$REHEARSAL_RUN_ID" "$(<"$ANCHOR_SQL_DIR/$step.sql")" || {
+        --parameter=run_id::"$REHEARSAL_RUN_ID" < "$ANCHOR_SQL_DIR/$step.sql" || {
         ANCHOR_EXIT=$?
         break
       }

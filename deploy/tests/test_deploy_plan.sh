@@ -3240,7 +3240,8 @@ if command == 'bq':
     leaf = next((x for x in args if x in ('head', 'ls', 'show', 'query', 'update', 'mk')), '')
     if not impersonated:
         if leaf == 'ls':
-            if fault == 'positive_no_table' or (fault == 'no_table' and args[-1] != os.environ['PROJECT'] + ':' + os.environ['DATASET_REPORTING']): print('[]')
+            # Real bq prints an empty body, not '[]', for a dataset with no tables.
+            if fault == 'positive_no_table' or (fault == 'no_table' and args[-1] != os.environ['PROJECT'] + ':' + os.environ['DATASET_REPORTING']): pass
             elif fault == 'malformed_resolution': print('[null]')
             elif fault == 'view_first' and args[-1].endswith(':' + os.environ['DATASET_REPORTING']):
                 page = [{'type': kind, 'tableReference': {'tableId': name}} for kind, name in [('VIEW', 'a_view'), ('SNAPSHOT', 'b_snapshot'), ('TABLE', 'probe_table')]]
@@ -3331,7 +3332,9 @@ if command == 'bq':
             lines = [x for x in result.stdout.splitlines() if '--set_label=app:pmax' in x and f':{dataset} ' in x]
             self.assertEqual(len(lines), 1, f'missing dataset label update: {dataset}')
             self.assertIn('--set_label=env:verify', lines[0])
-        self.assertEqual(result.stdout.count('--update-labels=app=pmax\\,env=verify'), 2)
+        # Report, config and the Cloud Build staging bucket carry the pack labels.
+        self.assertEqual(result.stdout.count('--update-labels=app=pmax\\,env=verify'), 3)
+        self.assertIn('gs://' + state.get('PROJECT', self.env.get('PROJECT', '')) + '_cloudbuild', result.stdout)
 
     def test_looker_iam_bindings(self):
         result = self.run_phase('40-iam.sh', PLAN='1')
@@ -3425,6 +3428,12 @@ if command == 'bq':
                       [call['args'][-3:] for call in calls if 'head' in call['args']])
         for leaf in ('head', 'show', 'query'):
             selected = [x['args'] for x in calls if leaf in x['args']]
+            if route == 'synthetic' and leaf in ('head', 'query'):
+                # An empty dataset has no provable table read: no head beyond the
+                # positive control and no SELECT probe may be issued.
+                selected = [a for a in selected if a[-1] != positive and not a[-1].startswith('CREATE')]
+                self.assertEqual(selected, [])
+                continue
             if leaf == 'head':
                 selected = [a for a in selected if a[-1] != positive]
                 self.assertEqual({a[-1] for a in selected}, {f"{project}:{d}.{table}" for d in denied})
@@ -3448,6 +3457,12 @@ if command == 'bq':
             self.assertEqual({x['dataset'] for x in probes}, denied)
             for probe in probes:
                 self.assertEqual((probe['route'], probe['table'], probe['resolved_by']), (route, table, 'operator'))
+                expected = 'NOT_PROVABLE_EMPTY_DATASET' if route == 'synthetic' and permission != 'datasets.get' else 'PERMISSION_DENIED'
+                self.assertEqual(probe['outcome'], expected)
+        for dataset in denied:
+            slot = record['audit_log'][dataset]
+            self.assertIsNone(slot['datasets.get'])
+            self.assertEqual(slot['tables.getData'], 'NOT_PROVABLE_EMPTY_DATASET' if route == 'synthetic' else None)
         self.assertNotIn('ROW_DATA_MUST_NOT_BE_RECORDED', json.dumps(record))
         return record
 
@@ -4159,8 +4174,8 @@ if [[ ! -f "$ROOT/INDEX.md" ]]; then
     fail "INDEX.md is missing from the private tree"
   fi
   echo "SKIP: $ROOT/INDEX.md absent (private file not part of this export)"
-elif ! grep -Eq '^\| RUNBOOK\.md \|.*\| 2026-08-29 \|$' "$ROOT/INDEX.md"; then
-  fail "INDEX.md does not date the RUNBOOK row to 2026-08-29"
+elif ! grep -Eq '^\| RUNBOOK\.md \|.*\| 2026-09-27 \|$' "$ROOT/INDEX.md"; then
+  fail "INDEX.md does not date the RUNBOOK row to 2026-09-27"
 fi
 
 # Private-tree rollback pinning: the generic anchor phrases above hold in

@@ -44,6 +44,9 @@ ensure_bucket() {
 
 ensure_bucket "$REPORT_BUCKET"
 ensure_bucket "$CONFIG_BUCKET"
+# Cloud Build stages the uploaded source here; phase 40 lets the dedicated
+# build identity read it (live 2026-10-04: 403 storage.objects.get without it).
+ensure_bucket "${PROJECT}_cloudbuild"
 run_cmd gcloud storage buckets update "gs://$REPORT_BUCKET" \
   --project="$PROJECT" --lifecycle-file="$ROOT/deploy/lifecycle.json" \
   --public-access-prevention --quiet
