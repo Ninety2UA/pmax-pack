@@ -6,7 +6,7 @@
   <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="docs/diagrams/readme-hero-dark-static.png">
   <source media="(prefers-reduced-motion: reduce)" srcset="docs/diagrams/readme-hero-static.png">
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/readme-hero-dark.webp">
-  <img src="docs/diagrams/readme-hero.webp" width="1600" height="640" alt="Looping animation of one night: a single Cloud Run Job starts every step in turn. Performance Max rows stream from Google Ads into a new typed-history layer in BigQuery, feed validated marts, pass a validation scan, and one transaction swaps all eight reporting tables to the new generation at once; Looker Studio redraws, the job checks off its run report, and the reporting window moves forward one day.">
+  <img src="docs/diagrams/readme-hero.webp" width="1600" alt="Looping animation of one night: a single Cloud Run Job starts every step in turn. Performance Max rows stream from Google Ads into a new typed-history layer in BigQuery, feed validated marts, pass a validation scan, and one transaction swaps all eight reporting tables to the new generation at once; Looker Studio redraws, the job checks off its run report, and the reporting window moves forward one day.">
 </picture>
 
 An operator-owned Google Ads pipeline for BigQuery, with campaign truth, asset
