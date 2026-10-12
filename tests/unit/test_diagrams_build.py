@@ -180,10 +180,29 @@ REQUIRED_CONNECTIONS = {
         ("retention", "rollback", True),
         ("rollback", "frozen", True),
     },
+    # The three credential pieces meet in one file, which the ladder stores
+    # as a pinned secret version that the job reads.
+    "credential-pieces": {
+        ("project", "consent", False),
+        ("mcc", "yaml", False),
+        ("project", "yaml", False),
+        ("consent", "yaml", False),
+        ("yaml", "secret", False),
+        ("secret", "job", False),
+    },
+    # Each worked case leads to exactly one access level.
+    "access-levels": {
+        ("start", "own", False),
+        ("start", "volume", False),
+        ("start", "product", False),
+        ("own", "explorer", False),
+        ("volume", "basic", False),
+        ("product", "standard", False),
+    },
 }
 
 
-def test_real_scene_catalog_has_all_six_diagrams():
+def test_real_scene_catalog_matches_the_documented_diagrams():
     assert {diagram.name for diagram in build.DIAGRAMS} == set(REQUIRED_CONNECTIONS)
     assert len(build.DIAGRAMS) == len(REQUIRED_CONNECTIONS)
 

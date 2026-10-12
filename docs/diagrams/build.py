@@ -225,6 +225,45 @@ DIAGRAMS = (
             Edge("rollback", "frozen", True),
         ),
     ),
+    Diagram(
+        "credential-pieces",
+        (
+            Node("mcc", "Manager account\nlogin_customer_id\nlegacy dev token", 0, 0, "source"),
+            Node("project", "Pack's Cloud project\nAds API access level\nDesktop OAuth client", 1, 0, "control"),
+            Node("consent", "MCC user's consent\nrefresh token\nscope adwords", 2, 0, "source"),
+            Node("yaml", "google-ads.yaml\none file, mode 600\noutside any repo", 1, 1, "data"),
+            Node("job", "Cloud Run Job\npinned by phase 50\nreads the mount", 0, 2, "runtime"),
+            Node("secret", "Secret Manager\nnumeric version\nadded by phase 30", 1, 2, "runtime"),
+        ),
+        (
+            Edge("project", "consent"),
+            Edge("mcc", "yaml"),
+            Edge("project", "yaml"),
+            Edge("consent", "yaml"),
+            Edge("yaml", "secret"),
+            Edge("secret", "job"),
+        ),
+    ),
+    Diagram(
+        "access-levels",
+        (
+            Node("start", "Ads API enabled\nproject starts at\nTest: test accounts", 1, 0, "control"),
+            Node("own", "Own accounts, a few\nhundred calls a day\nthis pack's default", 0, 1, "source"),
+            Node("volume", "Over 2,880 calls a\nday, or a service\nExplorer blocks", 1, 1, "source"),
+            Node("product", "A product other\npeople's accounts\nsign in to", 2, 1, "source"),
+            Node("explorer", "Explorer\n2,880 operations\na day, automatic\nInternal is fine", 0, 2, "runtime"),
+            Node("basic", "Basic\n15,000 operations\na day; needs brand\nverification", 1, 2, "output"),
+            Node("standard", "Basic or Standard\nExternal app with\nverified brand", 2, 2, "output"),
+        ),
+        (
+            Edge("start", "own"),
+            Edge("start", "volume"),
+            Edge("start", "product"),
+            Edge("own", "explorer"),
+            Edge("volume", "basic"),
+            Edge("product", "standard"),
+        ),
+    ),
 )
 
 
