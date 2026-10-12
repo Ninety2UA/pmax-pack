@@ -26,8 +26,9 @@ extraction, validation, publication, and the run ledger.
 | Choose a storage mode and understand what can be lost | [Storage](docs/storage.md) |
 | Connect a report and build its calculated fields | [Looker Studio](docs/looker.md) |
 | Diagnose a run, rebuild history, or respond to an incident | [Operations](docs/operations.md) |
+| Create the Google Ads credential and pick an access level | [Credentials](docs/credentials.md) |
 | Upgrade an existing deployment | [v2.1.0 migration](docs/migrations/v2.1.0.md) |
-| Review permissions or release changes | [IAM](deploy/iam.md) · [Release notes](docs/releases/v2.1.1.md) |
+| Review permissions or release changes | [IAM](deploy/iam.md) · [Release notes](docs/releases/v2.1.2.md) |
 
 ## What you get
 
@@ -216,6 +217,38 @@ Docker engine. The ladder checks the
 project's organization parent, `app=pmax` label, region, and the enforced
 `iam.disableServiceAccountKeyCreation` policy. Keep the Google Ads credential
 file outside the repository.
+
+### Google Ads credential prerequisites
+
+The pack calls the Google Ads API with a `google-ads.yaml` file built from three
+pieces:
+
+- **An access level**, held by the pack's own Cloud project. Since 2026-09-09
+  Google grants it to the project that owns the OAuth client, not to a developer
+  token. Enabling the Google Ads API starts the project at Test, which reaches
+  test accounts only. Reporting on your own accounts needs Explorer, which
+  allows 2,880 operations a day and is reviewed automatically; the pack sends 17
+  queries per account per night.
+- **An OAuth client** of type Desktop app, created in that same project. A client
+  borrowed from another project brings that project's access level along, and
+  it stops working when that project is shut down.
+- **A refresh token**: the consent of the Google user who manages your manager
+  account (MCC), minted through that client with `scripts/mint_refresh_token.py`.
+
+The consent screen is either Internal, for users in your own organization with
+no publishing or verification step, or External with publishing status In
+production. Set `PMAX_OAUTH_PUBLISHING_STATUS` to `internal` or `production` to
+match. Basic access, for more than 2,880 operations a day, needs an External app
+with a verified brand.
+
+![The manager account ID, the access level and OAuth client in the pack's Cloud project, and the refresh token meet in google-ads.yaml, which the ladder stores as a Secret Manager version that the Cloud Run Job reads](docs/diagrams/credential-pieces.svg)
+
+[Editable credential scene](docs/diagrams/credential-pieces.excalidraw)
+
+The [credential guide](docs/credentials.md) explains the access levels with
+three worked cases and walks through every console and terminal step.
+
+### Configure, preview, and upgrade
 
 Configuration uses string dataset identifiers and explicit principals:
 

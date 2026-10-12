@@ -25,7 +25,7 @@ export PMAX_DEPLOYER_MEMBER='user:deployer@example.invalid'
 export PMAX_OPERATOR_MEMBER='user:operator@example.invalid'
 export PMAX_GITHUB_REPOSITORY_ID='<github-repository-numeric-id>'
 export PMAX_GITHUB_OWNER_ID='<github-owner-numeric-id>'
-export PMAX_OAUTH_PUBLISHING_STATUS='<observed-publishing-status>'
+export PMAX_OAUTH_PUBLISHING_STATUS='<production-or-internal>'
 ```
 
 | Input | Meaning |
@@ -34,7 +34,7 @@ export PMAX_OAUTH_PUBLISHING_STATUS='<observed-publishing-status>'
 | `PMAX_OPERATOR_MEMBER` | Named operator IAM member for runtime token minting, secret access and the time-bound Looker probe grant in phase 40. |
 | `PMAX_GITHUB_REPOSITORY_ID` | Numeric GitHub repository ID used by phase 45's WIF repository condition and principal-set binding. |
 | `PMAX_GITHUB_OWNER_ID` | Numeric GitHub repository-owner ID used by phase 45's WIF owner condition; this is not the Google Cloud organization ID. |
-| `PMAX_OAUTH_PUBLISHING_STATUS` | Observed publishing status of the existing OAuth client, such as `production`; phase 30 requires a value and refuses `Testing`. |
+| `PMAX_OAUTH_PUBLISHING_STATUS` | How the OAuth client's consent screen is set up, as shown on the Google Auth Platform Audience page: `production` for user type External with publishing status In production, or `internal` for user type Internal, which has no publishing status. Phase 30 requires a value and refuses `Testing`, because a refresh token minted while an External app is in Testing expires after seven days. See the [credential guide](../docs/credentials.md). |
 
 Phase 40 falls back to the CLI operator identity when either member input is
 unset; set both explicitly to make the reviewed role split clear. Phase 45
@@ -83,7 +83,9 @@ creator on runtime.
 
 ## Credential model
 
-The secret contains the shared manager-account (MCC) token from the operator's
+A deployment built with the [credential guide](../docs/credentials.md) has its own
+OAuth client and refresh token. When the deployment reuses a shared credential
+file instead, the secret contains the shared manager-account (MCC) token from the operator's
 existing credential file and own Google login. The credential uses the existing top
 manager as `login_customer_id`; the runtime extracts only the accounts named in
 the deployed config. Neither the deployer nor the runtime mints a user, token,

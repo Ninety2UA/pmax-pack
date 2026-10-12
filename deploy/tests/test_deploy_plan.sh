@@ -1115,6 +1115,9 @@ class MigrationDocumentTests(unittest.TestCase):
                          'PMAX_GITHUB_REPOSITORY_ID', 'PMAX_GITHUB_OWNER_ID',
                          'PMAX_OAUTH_PUBLISHING_STATUS'):
             self.pin('bootstrap.' + variable, block.group(1), 'export ' + variable + '=')
+        self.pin('bootstrap.oauth_publishing_values', section,
+                 '`production` for user type External with publishing status In production, '
+                 'or `internal` for user type Internal, which has no publishing status')
 
     def test_public_quota_billed_byte_basis(self):
         doc = self.document('deploy/iam.md')
@@ -3796,6 +3799,9 @@ for spec in "${expected_specs[@]}"; do
   (( line > previous )) || fail "phase order is wrong at $phase"
   previous="$line"
 done
+# The Google Ads API must be on in the project that owns the pack's OAuth client.
+grep -Eq '^PLAN  gcloud services enable .*googleads\.googleapis\.com' "$TMP/plan.out" || \
+  fail "phase 10 must enable the Google Ads API (googleads.googleapis.com)"
 if grep -Fq 'plan-output-canary-must-never-appear' "$TMP/plan.out"; then
   fail "plan leaked credential contents"
 fi
@@ -4078,6 +4084,7 @@ run_secret_case() {
   local upgrade="${3:-0}"
   local pinned_file="${4:-$TMP/config.yaml}"
   local candidate_file="${5:-$TMP/credential.yaml}"
+  local publishing_status="${6-production}"
   : >"$TMP/secret.log"
   PATH="$TMP/bin:$PATH" \
   FAKE_GCLOUD_LOG="$TMP/secret.log" \
@@ -4089,7 +4096,7 @@ run_secret_case() {
   PROJECT=test-pmax-project \
   CREDENTIAL_FILE="$candidate_file" \
   SECRET_NAME=pmax-google-ads \
-  PMAX_OAUTH_PUBLISHING_STATUS=production \
+  PMAX_OAUTH_PUBLISHING_STATUS="$publishing_status" \
   ACCOUNTS_CSV=1234567890 \
   UPGRADE="$upgrade" \
   PLAN=0 \
@@ -4125,6 +4132,25 @@ assert_contains "$TMP/missing-credential.out" "operator credential file is missi
 if [[ -s "$TMP/secret.log" ]]; then
   fail "secret phase touched Secret Manager without the operator credential file"
 fi
+
+# The documented publishing values: internal is accepted; Testing in any case and
+# an empty value are refused before Secret Manager is touched.
+run_secret_case 1 1 0 "$TMP/config.yaml" "$TMP/credential.yaml" internal
+assert_contains "$TMP/secret.log" "secrets versions add pmax-google-ads"
+for publishing_status in testing Testing TESTING ''; do
+  if run_secret_case 1 1 0 "$TMP/config.yaml" "$TMP/credential.yaml" "$publishing_status" \
+    >"$TMP/oauth-status.out" 2>&1; then
+    fail "secret phase accepted OAuth publishing status '$publishing_status'"
+  fi
+  if [[ -n "$publishing_status" ]]; then
+    assert_contains "$TMP/oauth-status.out" "OAuth client publishing status Testing is forbidden"
+  else
+    assert_contains "$TMP/oauth-status.out" "PMAX_OAUTH_PUBLISHING_STATUS is required"
+  fi
+  if [[ -s "$TMP/secret.log" ]]; then
+    fail "secret phase touched Secret Manager under OAuth publishing status '$publishing_status'"
+  fi
+done
 
 mkdir -p "$TMP/product/deployments/test-pmax-project"
 cat >"$TMP/product/deployments/test-pmax-project/deployment.yaml" <<'YAML'

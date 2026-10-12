@@ -572,5 +572,7 @@ def test_e4_dry_run_over_real_product_folder(tmp_path: Path):
         ".github/",
         "example.yaml",
         "uv.lock",
+        "docs/credentials.md",
+        "scripts/mint_refresh_token.py",
     ):
         assert name in tree

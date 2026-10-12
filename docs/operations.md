@@ -336,7 +336,10 @@ recheck Data Credentials, refresh a chart and verify the reader principal with
 the [credential-flip detector](#credential-flip-detector).
 The [Looker guide](looker.md) covers setup and verification.
 
-The secret holds the shared manager-account (MCC) token from the operator's
+To build the credential file from scratch, with the pack's own OAuth client and
+a Google Ads API access level, use the [credential guide](credentials.md).
+When the deployment reuses a shared credential file instead, the secret holds the
+shared manager-account (MCC) token from the operator's
 existing Google Ads credential file and own Google login. Its top-manager `login_customer_id`
 provides access, while the deployed config's exact account list bounds
 extraction. The operator keeps a private shared-token consumer inventory. Each
